@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width = device-width, 
+        initial-scale = 1">
+        <title>IleftXMLtoJSONConverter</title>
+        <link rel="stylesheet" type="text/css" href="mainstyle.css">
+    </head>
+    <body>
+        <div class="container">
+            <h2>ILEFT .planxml to JSON Converter</h2>
+            <div class="actionButtons">
+                <div class="getBearerToken">
+                    <label for="username">User name:</label>
+                    <input type="text" id="username" name="username" value="stephen.mcandrew">
+                    <label for="app_key">App key:</label>
+                    <input type="text" id="app_key" name="app_key" value="qa1">
+                    <br><br>
+                    <button type="button" class="btn-lg" id="getTokenButton" onClick="onGetBearerToken()">Get Bearer Token</button>
+                    <br>
+                    <div class=tokenOutArea>
+                        <div class=tokenoutArea-AlignRight>
+                            <button type="button" class="btn-sm" id="copyButton" onClick="copyText()">Copy</button>
+                            <br>
+                            <textarea id="tokenOut" rows="2" cols="65" class="form-control"></textarea>
+                        </div> 
+                    </div>     
+                </div>
+                <br>
+                <div>
+                    <input type="file" id="file-selector" accept=".planxml" multiple>
+                </div>
+                <br>
+                <div class="outputTextArea">
+                    <textarea id="output1" rows="30" cols="65" class="form-control"></textarea>
+                </div>
+            </div>
+        </div>
+        <script src="bearertoken.js"></script>
+    </body> 
+</html>

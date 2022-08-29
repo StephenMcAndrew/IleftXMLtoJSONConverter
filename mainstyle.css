@@ -1,0 +1,20 @@
+.container{
+    text-align: center;
+}
+
+.btn-sm{
+    height: 15px;
+    width: 35px;
+    font-size: 10px;
+    padding: 0px;
+}
+
+.tokenOutArea{
+    display: inline-block;
+}
+
+.tokenoutArea-AlignRight{
+    display: inline-block;
+    text-align: right;
+}
+
