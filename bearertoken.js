@@ -1,26 +1,32 @@
-//------------Brearer Token------------//
+/******************************************************************************************************************
+*   This file contains all the code related to getting the bearer token needed to send the GraphQL JSON mutation
+*******************************************************************************************************************/
 
-let bearerToken;
-let username;
-let app_key;
+let bearerToken; //The bearer token that will be used for the mutation http request
+let username; //The valid user name entered by the user
+let app_key; //The app specific key needed when making the http request to get the bearer token
 let xhr_Auth = new XMLHttpRequest();
 let url_Auth;
 
 function onGetBearerToken() {
 
+  // Get the username and app specific key from the input boxes
   username = document.getElementById("username").value;
   app_key = document.getElementById("app_key").value;
 
+  // Alert the user if either the user name or app key inputs are missing
   if(username == "" || app_key == "") {
     alert("Enter \"User name\" and \"App key\" first.");
     return 0;
   }
   
+  // Construnct the url and send the HTTP request to get the bearer token 
   url_Auth = "https://testplaneditor-qa.gentex.com/auth/graphql?user_name=" + username + "&app_specific_key=" + app_key;
   xhr_Auth.open("POST", url_Auth);
   xhr_Auth.send();
 }
 
+// Parse the HTTP request response to get the bearer token
 xhr_Auth.addEventListener("readystatechange", function() {
   if(this.readyState == 4 && this.status == 200) {
     bearerToken = JSON.parse(this.responseText).token;
@@ -28,6 +34,7 @@ xhr_Auth.addEventListener("readystatechange", function() {
   }
 });
 
+// Coppy the bearer token when the coppy button is pressed
 function copyText() {
  var copiedText = document.getElementById("tokenOut").value;
 
@@ -37,47 +44,11 @@ function copyText() {
     return;
  }
 
-   /* Copy the text inside the text field */
+  // Copy the text inside the text field
   navigator.clipboard.writeText(copiedText);
 
-  /* Alert the copied text */
+  // Alert the user the text has been copied
   alert("The bearer token has been copied.");
 }
-
-
-
-const fileSelector = document.getElementById('file-selector');
-const reader = new FileReader();
-let dataToSend;
-let fileData;
-fileSelector.addEventListener("change", function() {
-        const file = this.files[0];
-        console.log(file);
-
-        const reader = new FileReader();
-        reader.readAsText(file);
-        reader.onload = function() {
-            fileData = reader.result;
-            document.getElementById("output1").value = fileData;
-          };
-    });
-
-const xhr_TPE = new XMLHttpRequest();
-const url_TPE =  "https://testplaneditor-qa.gentex.com/graphql";
-
-function onSubmitFile() {
-  xhr_TPE.open("POST", url_TPE);
-  xhr_TPE.setRequestHeader("Authorization","Bearer " + bearerToken);
-  xhr_TPE.setRequestHeader("Content-Type", "application/json");
-  dataToSend = {query: fileData, variables: {}}
-  xhr_TPE.send(JSON.stringify(dataToSend));
-  
-}
-
-xhr_TPE.addEventListener("readystatechange", function() {
-  if(this.readyState === 4) {
-    document.getElementById("output1").value = this.responseText;
-  }
-});
 
 

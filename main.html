@@ -13,8 +13,8 @@
             <div class="actionButtons">
                 <div class="getBearerToken">
                     <label for="username">User name:</label>
-                    <input type="text" id="username" name="username" value="stephen.mcandrew">
-                    <label for="app_key">App key:</label>
+                    <input type="text" id="username" name="username" value="stephen.mcandrew">  
+                    <label id="appKeyLabel" for="app_key">App key:</label>
                     <input type="text" id="app_key" name="app_key" value="qa1">
                     <br><br>
                     <button type="button" class="btn-lg" id="getTokenButton" onClick="onGetBearerToken()">Get Bearer Token</button>
@@ -29,7 +29,10 @@
                 </div>
                 <br>
                 <div>
-                    <input type="file" id="file-selector" accept=".planxml" multiple>
+                    <button type="button" class="btn-lg" id="fileSelectButton" onclick="document.getElementById('file-selector').click()">Select .planxml Files</button>
+                    <input type="file" id="file-selector" accept=".planxml" multiple style="display:none;">
+                    <button type="button" class="btn-lg" id="convertButton" onClick="onConvert()">Convert File(s) to JSON</button>
+                    <button type="button" class="btn-lg" id="submitButton" onClick="onSubmitFile()">Submit JSON</button>
                 </div>
                 <br>
                 <div class="outputTextArea">
@@ -38,5 +41,7 @@
             </div>
         </div>
         <script src="bearertoken.js"></script>
+        <script src="fileselector.js"></script>
+        <script src="convert.js"></script>
     </body> 
 </html>
