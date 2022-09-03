@@ -1,0 +1,22 @@
+{
+  "name": "ileftxmltojsonconverter",
+  "version": "1.0.0",
+  "description": "A tool to convert ILEFT .planxml files to a JSON file and submit it to the database",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron ."
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/StephenMcAndrew/IleftXMLtoJSONConverter.git"
+  },
+  "author": "Stephen McAndrew",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/StephenMcAndrew/IleftXMLtoJSONConverter/issues"
+  },
+  "homepage": "https://github.com/StephenMcAndrew/IleftXMLtoJSONConverter#readme",
+  "devDependencies": {
+    "electron": "^20.1.1"
+  }
+}
