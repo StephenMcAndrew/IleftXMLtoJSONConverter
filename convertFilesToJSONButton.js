@@ -1,30 +1,14 @@
 /********************************************************************************************************************************
 *   This file contains all the code related to combining all the selected XML files and connverting them into a single JSON file.
 *********************************************************************************************************************************/
-
-let xmlDocs = [];
-
 async function onConvert() {
     
+    //Fisrt, read the .planxml files into a sting array. Each element contains the contents of a .planxml file as a string.
     const xmlStringArray = await readFilesToXMLStringArray(selectedFiles);
-    console.log(xmlStringArray);
 
+    // Then, parse each string in the xmlStringArray into a XMLDoc object and place all of the new objects into an array
     const xmlDocArray = await parseXMLStringArrayToXMLDocArray(xmlStringArray);
-    console.log(xmlDocArray);
 
-    output1.value = "";
-
-    let testsNode = xmlDocArray[0].getElementsByTagName("m_tests")[0];
-    console.log(testsNode);
-
-    for(let i = 0; i < testsNode.childNodes.length; i++)
-    {
-       if(testsNode.childNodes[i].nodeName == "item")
-       {
-            console.log(testsNode.childNodes[i].getElementsByTagName("m_name")[0].childNodes[0].nodeValue);  
-            //output1.value += testsNode.childNodes[i].getElementsByTagName("m_name")[0].nodeValue + "\n";
-       }  
-    }
 }
 
 async function readFilesToXMLStringArray(selectedFiles) {

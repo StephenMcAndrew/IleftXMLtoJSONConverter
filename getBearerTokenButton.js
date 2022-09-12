@@ -6,7 +6,7 @@ let bearerToken; //The bearer token that will be used for the mutation http requ
 let username; //The valid user name entered by the user
 let app_key; //The app specific key needed when making the http request to get the bearer token
 let xhr_Auth = new XMLHttpRequest();
-let url_Auth;
+let url_Auth; 
 
 function onGetBearerToken() {
 
