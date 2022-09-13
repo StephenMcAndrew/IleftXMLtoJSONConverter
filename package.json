@@ -1,22 +1,18 @@
 {
-  "name": "ileftxmltojsonconverter",
+  "name": "ilef-xml-to-json-converter",
+  "productName": "IleftXMLtoJSONConverter",
+  "description": "My Electron application description",
+  "keywords": [],
+  "main": "./main.js",
   "version": "1.0.0",
-  "description": "A tool to convert ILEFT .planxml files to a JSON file and submit it to the database",
-  "main": "main.js",
+  "author": "stephen.mcandrew",
   "scripts": {
     "start": "electron ."
   },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/StephenMcAndrew/IleftXMLtoJSONConverter.git"
+  "dependencies": {
+    "uuid": "^9.0.0"
   },
-  "author": "Stephen McAndrew",
-  "license": "ISC",
-  "bugs": {
-    "url": "https://github.com/StephenMcAndrew/IleftXMLtoJSONConverter/issues"
-  },
-  "homepage": "https://github.com/StephenMcAndrew/IleftXMLtoJSONConverter#readme",
   "devDependencies": {
-    "electron": "^20.1.1"
+    "electron": "20.1.1"
   }
 }

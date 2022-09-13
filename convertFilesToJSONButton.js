@@ -9,8 +9,11 @@ async function onConvert() {
     // Then, parse each string in the xmlStringArray into a XMLDoc object and place all of the new objects into an array
     const xmlDocArray = await parseXMLStringArrayToXMLDocArray(xmlStringArray);
 
+    //Create the initial test plan document from the template JSON string 
+    TheTestPlan.document = JSON.parse(TheTestPlan.templateJSONstr);
 }
 
+//Read each selected file as a string. All the strings get put into an array.
 async function readFilesToXMLStringArray(selectedFiles) {
     const xmlStringArray = selectedFiles.map(file => {
         const reader = new FileReader();
@@ -22,6 +25,7 @@ async function readFilesToXMLStringArray(selectedFiles) {
     return await Promise.all(xmlStringArray);
 }
 
+//Parse each XML string into and XML Doc object. All the XML Doc objects get put into an array.
 async function parseXMLStringArrayToXMLDocArray(xmlStringArray) {
     const xmlDocArray = xmlStringArray.map(str => {
         const xmlParser = new DOMParser();

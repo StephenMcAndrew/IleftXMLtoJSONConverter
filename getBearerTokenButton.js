@@ -3,16 +3,14 @@
 *******************************************************************************************************************/
 
 let bearerToken; //The bearer token that will be used for the mutation http request
-let username; //The valid user name entered by the user
-let app_key; //The app specific key needed when making the http request to get the bearer token
 let xhr_Auth = new XMLHttpRequest();
 let url_Auth; 
 
 function onGetBearerToken() {
 
   // Get the username and app specific key from the input boxes
-  username = document.getElementById("username").value;
-  app_key = document.getElementById("app_key").value;
+  let username = document.getElementById("username").value;
+  let app_key = document.getElementById("app_key").value;
 
   // Alert the user if either the user name or app key inputs are missing
   if(username == "" || app_key == "") {
