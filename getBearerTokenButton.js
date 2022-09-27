@@ -33,7 +33,7 @@ xhr_Auth.addEventListener("readystatechange", function() {
 });
 
 // Coppy the bearer token when the coppy button is pressed
-function copyText() {
+function copyBearerTokenText() {
  var copiedText = document.getElementById("tokenOut").value;
 
  if (copiedText == "")
@@ -46,7 +46,7 @@ function copyText() {
   navigator.clipboard.writeText(copiedText);
 
   // Alert the user the text has been copied
-  alert("The bearer token has been copied.");
+  //alert("The bearer token has been copied.");
 }
 
 

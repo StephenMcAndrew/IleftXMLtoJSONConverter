@@ -9,11 +9,11 @@
     padding: 0px;
 }
 
-.tokenOutArea{
+.tokenOutArea, .outputTextArea{
     display: inline-block;
 }
 
-.tokenoutArea-AlignRight{
+.tokenoutArea-AlignRight, .outputTextArea-AlignRight{
     display: inline-block;
     text-align: right;
 }

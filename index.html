@@ -21,7 +21,7 @@
                     <br>
                     <div class=tokenOutArea>
                         <div class=tokenoutArea-AlignRight>
-                            <button type="button" class="btn-sm" id="copyButton" onClick="copyText()">Copy</button>
+                            <button type="button" class="btn-sm" id="copyButton" onClick="copyBearerTokenText()">Copy</button>
                             <br>
                             <textarea id="tokenOut" rows="2" cols="65" class="form-control"></textarea>
                         </div> 
@@ -29,14 +29,17 @@
                 </div>
                 <br>
                 <div>
-                    <button type="button" class="btn-lg" id="fileSelectButton" onclick="document.getElementById('file-selector').click()">Select .planxml Files</button>
+                    <button type="button" class="btn-lg" id="fileSelectButton" onclick="onFileSelector()">Select .planxml Files</button>
                     <input type="file" id="file-selector" accept=".planxml" multiple style="display:none;">
                     <button type="button" class="btn-lg" id="convertButton" onClick="onConvert()">Convert File(s) to JSON</button>
                     <button type="button" class="btn-lg" id="submitButton" onClick="onSubmitFile()">Submit JSON</button>
                 </div>
-                <br>
-                <div class="outputTextArea">
-                    <textarea id="output1" rows="30" cols="65" class="form-control"></textarea>
+                <div id="outputTextArea">
+                    <div class="outputTextArea-AlignRight">
+                        <button type="button" class="btn-sm" id="copyButton" onClick="copyOutputText()">Copy</button>
+                        <br>
+                        <textarea id="output1" rows="30" cols="65" class="form-control"></textarea>
+                    </div>
                 </div>
             </div>
         </div>
