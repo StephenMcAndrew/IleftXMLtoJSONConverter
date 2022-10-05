@@ -6,6 +6,8 @@ contextBridge.exposeInMainWorld('uuid_api', {
     get: () => uuidv1()
 }); 
 
+/*
 contextBridge.exposeInMainWorld('xml2js', {
     newParser: () => { return new xml2js.Parser() }
 });
+*/

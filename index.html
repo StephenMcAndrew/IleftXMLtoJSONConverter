@@ -29,10 +29,12 @@
                 </div>
                 <br>
                 <div>
-                    <button type="button" class="btn-lg" id="fileSelectButton" onclick="onFileSelector()">Select .planxml Files</button>
+                    <button type="button" class="btn-lg" id="fileSelectButton" onclick="onFileSelector()">Select .planxml</button>
                     <input type="file" id="file-selector" accept=".planxml" multiple style="display:none;">
-                    <button type="button" class="btn-lg" id="convertButton" onClick="onConvert()">Convert File(s) to JSON</button>
-                    <button type="button" class="btn-lg" id="submitButton" onClick="onSubmitFile()">Submit JSON</button>
+                    <button type="button" class="btn-lg" id="iniSelectButton" onclick="onINISelector()">Select .ini</button>
+                    <input type="file" id="ini-selector" accept=".ini" multiple style="display:none;">
+                    <button type="button" class="btn-lg" id="convertButton" onClick="onConvert()">Convert</button>
+                    <button type="button" class="btn-lg" id="submitButton" onClick="onSubmitFile()">Submit</button>
                 </div>
                 <div id="outputTextArea">
                     <div class="outputTextArea-AlignRight">
@@ -45,6 +47,7 @@
         </div>
         <script src="getBearerTokenButton.js"></script>
         <script src="selectXMLFilesButton.js"></script>
+        <script src="selectINIFilesButton.js"></script>
         <script src="convertFilesToJSONButton.js"></script>
         <script src="submitJSONButton.js"></script>
         <script src="TestPlan.js"></script>

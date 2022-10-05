@@ -6,7 +6,6 @@ let output1 = document.getElementById("output1");
 const fileSelector = document.getElementById('file-selector');
 let selectedFiles = [];
 
-
 function onFileSelector() {
     
     //Alert the user if they have not gotten a bearer token yet
@@ -21,7 +20,7 @@ function onFileSelector() {
 fileSelector.addEventListener("change", function() {
 
     //Put all the selected files into an array
-    output1.value = "Files selected to convert:\n"
+    output1.value = ".planxml files selected to convert:\n"
     for(let i = 0; i <= this.files.length -1; i++){
         output1.value += this.files[i].name + "\n";
         //console.log(this.files[i]);

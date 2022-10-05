@@ -1,9 +1,9 @@
 class TestPlan {
 
-  constructor() {
+  constructor(testBinary) {
     this.username = document.getElementById("username").value;
     this.DocObj = JSON.parse(this.templateTPDocStr(this.username));
-    
+    this.libraryName = [];
   }
 
   //This method takes a JSON string and converts it to a JavaScript object string. I.g, it removes the "" from the object porperty names.
@@ -12,39 +12,60 @@ class TestPlan {
   //Return the the test plan documant as a JavaScript string.
   getDocObjAsJSstr(pretty = false) { return pretty ?  this.JSONstr_To_JSstr(JSON.stringify(this.DocObj, null, 2)) : this.JSONstr_To_JSstr(JSON.stringify(this.DocObj)); }
 
-  addMeasurementCallers(testMethodsMap) {
+  
+  addMeasurementCallers(dciGenLibrariesInfo) {
+
+    let bundleNumber = 1;
     const universalPartNumberChildren = [];
+    const masterListOfFuncNames = [];
 
-    testMethodsMap.forEach((testMethodData, testMethodName) => {
-      
-      let groupID = this.getGroupID();
-      let bindingCallID = this.getBindingCallID();
+    dciGenLibrariesInfo.forEach((libraryData, libraryName) => {
 
-      let MeasurementCallerProps = {};
-      let BindingCallProps = {};
+      //Add the bundle property to the universal part number
+      let bundleName = libraryName + "." + libraryData.versionNumber + "-" + libraryData.platformName;
+      this.DocObj.elements.universalPartNumber.properties["bundle" + bundleNumber.toString()] = this.generateBaseProperty(bundleName, "string", "");
+      bundleNumber++;
 
-      MeasurementCallerProps.measurementResult = this.generateBaseProperty(bindingCallID + ".result", "double", "[OUTPUT]");
-      BindingCallProps.result = this.generateBaseProperty("0.0", "double", "[OUTPUT]");
-      BindingCallProps.fakeInput = this.generateBaseProperty(groupID + "." + "fakeInput", "string", "");
+      libraryData.functions.forEach(func => {
 
-      
-      testMethodData.testMethodArgs.forEach(arg => {
-        MeasurementCallerProps[arg] = this.generateBaseProperty("", "string", "");
-        BindingCallProps[arg] = this.generateBaseProperty(groupID + "." + arg, "string", "");
+        let groupID = this.getGroupID();
+        let bindingCallID = this.getBindingCallID();
+
+        let MeasurementCallerProps = {};
+        let BindingCallProps = {};
+
+        //We need each measurement caller to a unique name. If the testplan is using more then one test binary library, we get get duplicate name.
+        let functionName = func.name;
+        let i = 2;
+        while(masterListOfFuncNames.includes(functionName)){
+          functionName = functionName + `_${i.toString()}`;
+          i++;
+        }
+        masterListOfFuncNames.push(functionName);
+        
+        //Generate the measurement caller and binding call properties from the DCIGen params
+        func.params.forEach(param => {
+          let paramType = (param.type == "bool") ? "boolean" : param.type;
+          let description = (param.direction == "OUT") ? "[OUTPUT]" : "";
+          MeasurementCallerProps[param.name] = this.generateBaseProperty("", paramType, description);;
+          BindingCallProps[param.name] = this.generateBaseProperty(groupID + "." + param.name, paramType, description);
+        });
+
+        this.DocObj.elements[groupID] = this.generateBaseGroup("group", functionName, "universalPartNumber", "Body", MeasurementCallerProps, true);
+        this.DocObj.elements[bindingCallID] = this.generateBaseBindingCall("bindingCall", functionName, groupID, "Body", BindingCallProps, libraryName, func.name);
+  
+        this.DocObj.structure[groupID] = this.generateBaseStructure("group", [bindingCallID]);
+        this.DocObj.structure[bindingCallID] = this.generateBaseStructure("bindingCall", []);
+  
+        universalPartNumberChildren.push(groupID);
       });
-      
 
-      this.DocObj.elements[groupID] = this.generateBaseGroup("group", testMethodName, "universalPartNumber", "Body", MeasurementCallerProps, true);
-      this.DocObj.elements[bindingCallID] = this.generateBaseBindingCall("bindingCall", testMethodName, groupID, "Body", BindingCallProps, testMethodData.testBinary, testMethodName);
+      this.DocObj.structure.universalPartNumber.children = universalPartNumberChildren;
 
-      this.DocObj.structure[groupID] = this.generateBaseStructure("group", [bindingCallID]);
-      this.DocObj.structure[bindingCallID] = this.generateBaseStructure("bindingCall", []);
-
-      universalPartNumberChildren.push(groupID);
     })
 
-    this.DocObj.structure.universalPartNumber.children = universalPartNumberChildren;
   }
+  
 
   //This should be called every time a new group is created so we increment the group ID number
   groupIDNumber = 0;
@@ -79,6 +100,21 @@ class TestPlan {
     return group;
   }
 
+  /*
+  generateBaseEvaluation(description, parentIdentifier, comment, loop,   ) {
+    let testGroup = this.generateBaseGroup("evaluation", description, parentIdentifier, "Body", {}, false);
+    testGroup.comment = this.generateBaseProperty(comment, "builtin", "");
+    testGroup.loop = this.generateBaseProperty(loop, "builtin", "");
+
+    testGroup.interstitialRetryDelay = this.generateBaseProperty(retryDelay, "builtin", "");
+    testGroup.postExecuteDelay = this.generateBaseProperty(postDelay, "builtin", "");
+    testGroup.preExecuteDelay = this.generateBaseProperty(preDelay, "builtin", "");
+    
+    testGroup.try = this.generateBaseProperty(loop, "builtin", "");
+
+  }
+  */
+
   generateBaseBindingCall(type, description = "", parentIdentifier = "", phase = "Body", properties = {}, library = "", method = "") {
     let bindingCall = this.generateBaseElement(type, description, parentIdentifier, phase, properties);
     bindingCall.library = this.generateBaseProperty(library, "builtin", "");
@@ -106,150 +142,143 @@ class TestPlan {
   templateTPDocStr(username) {
     return `{
       "elements": {
-      "testplan": {
-        "type": "testPlan",
-        "description": "Test Plan root element",
-        "modificationTime": "${newDate.timeNow()}",
-        "properties": {},
-        "userName": "${username}",
-        "parentIdentifier": ""
-      },
-      "universalPartNumber": {
-        "type": "universalPartNumber",
-        "description": "705-1234-001",
-        "modificationTime": "${newDate.timeNow()}",
-        "partNumber": {
-          "description": "",
+        "testplan": {
+          "type": "testPlan",
+          "description": "Test Plan root element",
           "modificationTime": "${newDate.timeNow()}",
-          "type": "string",
+          "properties": {},
           "userName": "${username}",
-          "value": "705-1234-001"
+          "parentIdentifier": ""
         },
-        "parentIdentifier": "station",
-        "properties": {
-          "bundle1": {
-            "value": "ileft.testmethods.t750bfdmcommtests.3.0.0-windows-x32-any",
+        "universalPartNumber": {
+          "type": "universalPartNumber",
+          "description": "705-1234-001",
+          "modificationTime": "${newDate.timeNow()}",
+          "partNumber": {
+            "description": "",
+            "modificationTime": "${newDate.timeNow()}",
+            "type": "string",
+            "userName": "${username}",
+            "value": "705-1234-001"
+          },
+          "parentIdentifier": "station",
+          "properties": {
+            "index1": {
+              "value": 1,
+              "description": "",
+              "modificationTime": "${newDate.timeNow()}",
+              "type": "int",
+              "userName": "${username}"
+            },
+            "index2": {
+              "value": 2,
+              "description": "",
+              "modificationTime": "${newDate.timeNow()}",
+              "type": "int",
+              "userName": "${username}"
+            },
+            "index3": {
+              "value": 3,
+              "description": "",
+              "modificationTime": "${newDate.timeNow()}",
+              "type": "int",
+              "userName": "${username}"
+            }
+          },
+          "userName": "${username}",
+          "rows": {
+            "value": 1,
             "modificationTime": "${newDate.timeNow()}",
             "userName": "${username}",
-            "type": "string",
-            "description": ""
+            "type": "builtin"
           },
-          "index1": {
-            "value": 1,
-            "description": "",
-            "modificationTime": "${newDate.timeNow()}",
-            "type": "int",
-            "userName": "${username}"
-          },
-          "index2": {
-            "value": 2,
-            "description": "",
-            "modificationTime": "${newDate.timeNow()}",
-            "type": "int",
-            "userName": "${username}"
-          },
-          "index3": {
+          "columns": {
             "value": 3,
-            "description": "",
             "modificationTime": "${newDate.timeNow()}",
-            "type": "int",
-            "userName": "${username}"
+            "userName": "${username}",
+            "type": "builtin"
           }
         },
-        "userName": "${username}",
-        "rows": {
-          "value": 1,
+        "tests": {
+          "type": "tests",
+          "description": "Tests root element",
           "modificationTime": "${newDate.timeNow()}",
-          "userName": "${username}",
-          "type": "builtin"
+          "parentIdentifier": "testplan",
+          "properties": {},
+          "userName": "${username}"
         },
-        "columns": {
-          "value": 3,
+        "flow": {
+          "type": "flow",
+          "description": "Flow root element",
           "modificationTime": "${newDate.timeNow()}",
-          "userName": "${username}",
-          "type": "builtin"
+          "parentIdentifier": "testplan",
+          "properties": {},
+          "userName": "${username}"
+        },
+        "station": {
+          "type": "station",
+          "description": "iLEFT",
+          "modificationTime": "${newDate.timeNow()}",
+          "parentIdentifier": "tests",
+          "properties": {},
+          "userName": "${username}"
+        },
+        "requirements": {
+          "type": "requirements",
+          "description": "Requirements root element",
+          "modificationTime": "${newDate.timeNow()}",
+          "parentIdentifier": "testplan",
+          "properties": {},
+          "userName": "${username}"
+        },
+        "fixturing": {
+          "type": "fixturing",
+          "description": "Fixturing root element",
+          "modificationTime": "${newDate.timeNow()}",
+          "parentIdentifier": "testplan",
+          "properties": {},
+          "userName": "${username}"
         }
       },
-      "tests": {
-        "type": "tests",
-        "description": "Tests root element",
-        "modificationTime": "${newDate.timeNow()}",
-        "parentIdentifier": "testplan",
-        "properties": {},
-        "userName": "${username}"
-      },
-      "flow": {
-        "type": "flow",
-        "description": "Flow root element",
-        "modificationTime": "${newDate.timeNow()}",
-        "parentIdentifier": "testplan",
-        "properties": {},
-        "userName": "${username}"
-      },
-      "station": {
-        "type": "station",
-        "description": "iLEFT",
-        "modificationTime": "${newDate.timeNow()}",
-        "parentIdentifier": "tests",
-        "properties": {},
-        "userName": "${username}"
-      },
-      "requirements": {
-        "type": "requirements",
-        "description": "Requirements root element",
-        "modificationTime": "${newDate.timeNow()}",
-        "parentIdentifier": "testplan",
-        "properties": {},
-        "userName": "${username}"
-      },
-      "fixturing": {
-        "type": "fixturing",
-        "description": "Fixturing root element",
-        "modificationTime": "${newDate.timeNow()}",
-        "parentIdentifier": "testplan",
-        "properties": {},
-        "userName": "${username}"
-      }
-    },
-    "structure": {
-      "testplan": {
-        "type": "testPlan",
-        "children": [
-          "requirements",
-          "tests",
-          "fixturing",
-          "flow"
-        ]
-      },
-      "universalPartNumber": {
-        "type": "universalPartNumber",
-        "children": []
-      },
-      "tests": {
-        "type": "tests",
-        "children": [
-          "station"
-        ]
-      },
-      "flow": {
-        "type": "flow",
-        "children": []
-      },
-      "station": {
-        "type": "station",
-        "children": [
-          "universalPartNumber"
-        ]
-      },
-      "requirements": {
-        "type": "requirements",
-        "children": []
-      },
-      "fixturing": {
-        "type": "fixturing",
-        "children": []
-      }
-    },
+      "structure": {
+          "testplan": {
+            "type": "testPlan",
+            "children": [
+              "requirements",
+              "tests",
+              "fixturing",
+              "flow"
+            ]
+          },
+          "universalPartNumber": {
+            "type": "universalPartNumber",
+            "children": []
+          },
+          "tests": {
+            "type": "tests",
+            "children": [
+              "station"
+            ]
+          },
+          "flow": {
+            "type": "flow",
+            "children": []
+          },
+          "station": {
+            "type": "station",
+            "children": [
+              "universalPartNumber"
+            ]
+          },
+          "requirements": {
+            "type": "requirements",
+            "children": []
+          },
+          "fixturing": {
+            "type": "fixturing",
+            "children": []
+          }
+        },
     "rootElementIdentifier": "testplan",
     "name": "Stephens-Development-TestPlan"
     }`
