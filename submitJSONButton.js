@@ -7,6 +7,9 @@ const xhr_TPE_Mutation = new XMLHttpRequest();
 const url_TPE =  "https://testplaneditor-qa.gentex.com/graphql";
 
 function onSubmitFile() {
+
+   //Force add any new config files and commit to svn
+   svn.add(`${projectPath}\\generatedConfig`);
   
   //Open the XHR object to make the json request and set the needed header info
   xhr_TPE_Mutation.open("POST", url_TPE);
@@ -25,6 +28,9 @@ function onSubmitFile() {
   
   document.getElementById("output1").value = theTestPlan.getDocObjAsJSstr(true);
   xhr_TPE_Mutation.send(JSON.stringify(dataToSend));
+
+  //submit the config data
+  svn.commit(`${projectPath}\\generatedConfig`);
 }
 
 xhr_TPE_Mutation.addEventListener("readystatechange", function() {

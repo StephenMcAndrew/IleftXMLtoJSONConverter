@@ -10,8 +10,8 @@
     "start": "electron ."
   },
   "dependencies": {
-    "uuid": "^9.0.0",
-    "xml2js": "^0.4.23"
+    "node-svn-ultimate": "^1.2.1",
+    "uuid": "^9.0.0"
   },
   "devDependencies": {
     "electron": "20.1.1"
