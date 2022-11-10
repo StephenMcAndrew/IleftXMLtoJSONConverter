@@ -4,8 +4,8 @@ class TestPlan {
   constructor(testBinary) {
     this.username = document.getElementById("username").value;
     this.DocObj = JSON.parse(this.templateTPDocStr(this.username));
-    this.libraryName = [];
-    this.partNumbers;
+    this.libraryName; //The main test methods library name. i.e., not "ileft.testmethods.instrumentscontrol".
+    this.partNumbers; //An array of all the partnumbers
 
     // Uses this to keep track of which groupID goes with which measurement caller
     // Map{[key => MeasurementCallerName_Meas value => {library: libraryName, groupID: groupID}]}
@@ -13,10 +13,10 @@ class TestPlan {
   }
 
   //This method takes a JSON string and converts it to a JavaScript object string. I.g, it removes the "" from the object porperty names.
-  JSONstr_To_JSstr(JSONstr) { return JSONstr.replace(/("[A-Za-z0-9_]+":)/g, (match) => match.replace(/"/g,'')); }
+  static JSONstr_To_JSstr(JSONstr) { return JSONstr.replace(/("[A-Za-z0-9_]+":)/g, (match) => match.replace(/"/g,'')); }
 
   //Return the the test plan documant as a JavaScript string.
-  getDocObjAsJSstr(pretty = false) { return pretty ?  this.JSONstr_To_JSstr(JSON.stringify(this.DocObj, null, 2)) : this.JSONstr_To_JSstr(JSON.stringify(this.DocObj)); }
+  getDocObjAsJSstr(pretty = false) { return pretty ?  TestPlan.JSONstr_To_JSstr(JSON.stringify(this.DocObj, null, 2)) : TestPlan.JSONstr_To_JSstr(JSON.stringify(this.DocObj)); }
 
   addMeasurementCallers(dciGenLibrariesInfo, testPlanMethods) {
 
@@ -26,121 +26,256 @@ class TestPlan {
 
     dciGenLibrariesInfo.forEach((libraryData, libraryName) => {
 
+      //Set the testplan's main library name. We'll use this when when creating the init, load, unload, and teardown phases.
+      if(libraryName != "ileft.testmethods.instrumentscontrol" && libraryName != "ileft.platform.iptehandler") {
+        this.libraryName = libraryName;
+      }
+
       //Add the bundle property to the universal part number
       let bundleName = libraryName + "." + libraryData.versionNumber + "-" + libraryData.platformName;
       this.DocObj.elements.universalPartNumber.properties["bundle" + bundleNumber.toString()] = this.generateBaseProperty(bundleName, "string", "");
       bundleNumber++;
 
-      libraryData.functions.forEach(func => {
+      if(libraryName != "ileft.platform.iptehandler") {
+        libraryData.functions.forEach(func => {
 
-        if (testPlanMethods[libraryName].includes(func.name)) {
-          let groupID = this.getGroupID();
-          let bindingCallID = this.getBindingCallID();
-  
-          let MeasurementCallerProps = {};
-          let BindingCallProps = {};
-  
-          //We need each measurement caller to a unique name. If the testplan is using more then one test binary library, we get get duplicate name.
-          let functionName = func.name;
-          let i = 2;
-          while(masterListOfFuncNames.includes(functionName)){
-            functionName = functionName + `_${i.toString()}`;
-            i++;
-          }
-          masterListOfFuncNames.push(functionName);
-          this.measurementCallerMap.set(functionName, {library: libraryName, groupID: groupID, bindingCallID: bindingCallID}); //Keep track of all the measurement caller names and what library they use. We'll need this when we start adding the subtest evaluations.
-          
-          //Generate the measurement caller and binding call properties from the DCIGen params
-          func.params.forEach(param => {
-            let paramType = (param.type == "bool") ? "boolean" : param.type;
-            let measDescription = (param.direction == "OUT" || param.direction == "RETURN") ? "[OUTPUT]" : "[INPUT]";
-            let bindingDescription = (param.description + " " + measDescription).trim();
+          if (testPlanMethods[libraryName].includes(func.name)) {
+            let groupID = this.getGroupID();
+            let bindingCallID = this.getBindingCallID();
+    
+            let MeasurementCallerProps = {};
+            let BindingCallProps = {};
+    
+            //We need each measurement caller to a unique name. If the testplan is using more then one test binary library, we get get duplicate name.
+            let functionName = func.name;
+            let i = 2;
+            while(masterListOfFuncNames.includes(functionName)){
+              functionName = functionName + `_${i.toString()}`;
+              i++;
+            }
+            masterListOfFuncNames.push(functionName);
+            this.measurementCallerMap.set(functionName, {library: libraryName, groupID: groupID, bindingCallID: bindingCallID}); //Keep track of all the measurement caller names and what library they use. We'll need this when we start adding the subtest evaluations.
             
-            let measParamValue;
-            let bindingParamValue;
-
-            if(param.direction == "OUT" || param.direction == "RETURN") {
-              measParamValue = `${groupID}.${param.name}`;
-
-              if(param.type == "string") {
-                bindingParamValue = "";
-              }
-              else if(param.type == "int") {
-                bindingParamValue = 0;
-              }
-              else if(param.type == "double") {
-                bindingParamValue = 0.0;
-              }
-              else if(param.type == "bool" || param.type == "boolean") {
-                bindingParamValue = false;
-              }
+            //Generate the measurement caller and binding call properties from the DCIGen params
+            func.params.forEach(param => {
+              let paramType = (param.type == "bool") ? "boolean" : param.type;
+              let measDescription = (param.direction == "OUT" || param.direction == "RETURN") ? "[OUTPUT]" : "[INPUT]";
+              let bindingDescription = (param.description + " " + measDescription).trim();
               
-              
-            }
-            else {
-              bindingParamValue = `${groupID}.${param.name}`;
-
-              if(param.name == "arrayIndex" || param.name == "arrayIndexStr") { 
-                //measParamValue = "%index%";
-                //bindingParamValue = `${groupID}.arrayIndex`
-                bindingParamValue = "%index%";
-              }
-              else if(param.type == "int") {
-                measParamValue = parseInt(param.default);
-              }
-              else if (param.type == "double") {
-                measParamValue = parseFloat(param.default);
-              }
-              else if (param.type == "bool" || param.type == "boolean") {
-                measParamValue = (param.default === 'true' || param.default === '1');
-              }
-              else {
-                measParamValue = param.default;
-              }
-            }
-                
-            //None of these binding call params are currently use, so we will not add them to the measurement caller group
-            if ((param.name != "arrayIndex") && (param.name != "arrayIndexStr") && (param.name != "deferredResults") && (param.name != "formattedResults") && (param.name != "success") && (param.name != "result"))
-            {
-              //Rename the measurementResult param from the binding call to just measurementResult if needed
-              if(param.name == "measurementResultParameter" || param.name == "measurementResultOut") {
-                MeasurementCallerProps["measurementResult"] = this.generateBaseProperty(`${bindingCallID}.${param.name}`, "double", measDescription);
-              }
-              //else if(param.name == "arrayIndexStr") {
-              //  MeasurementCallerProps["arrayIndex"] = this.generateBaseProperty(measParamValue, paramType, measDescription);  
-              //}
-              else {
-                MeasurementCallerProps[param.name] = this.generateBaseProperty(measParamValue, paramType, measDescription);
-              }
-            }
-
-            //If it's an input parameter we need to bind it to the group measurement caller input by setting the property value. Or if its the array index param, we set it to %index%
-            //let bindingCallParmPropertyValue = "";
-            //if(param.direction == "IN") {
-            //  if(param.name == "arrayIndex" || param.name == "arrayIndexStr") { bindingCallParmPropertyValue = "%index%";}
-            //  else {bindingCallParmPropertyValue = `${groupID}.${param.name}`;}
-            //}
-          
-            BindingCallProps[param.name] = this.generateBaseProperty(bindingParamValue, paramType, bindingDescription);
-          });
+              let measParamValue;
+              let bindingParamValue;
   
-          this.DocObj.elements[groupID] = this.generateBaseGroup("group", functionName, "universalPartNumber", "Body", MeasurementCallerProps, true);
-          this.DocObj.elements[groupID].retry = this.generateBaseProperty(0, "builtin", "");
-          this.DocObj.elements[groupID].loop = this.generateBaseProperty(0, "builtin", "");
-
-          this.DocObj.elements[bindingCallID] = this.generateBaseBindingCall("bindingCall", functionName, groupID, "Body", BindingCallProps, libraryName, func.name);
+              if(param.direction == "OUT" || param.direction == "RETURN") {
+                measParamValue = `${groupID}.${param.name}`;
+  
+                if(param.type == "string") {
+                  bindingParamValue = "";
+                }
+                else if(param.type == "int") {
+                  bindingParamValue = 0;
+                }
+                else if(param.type == "double") {
+                  bindingParamValue = 0.0;
+                }
+                else if(param.type == "bool" || param.type == "boolean") {
+                  bindingParamValue = false;
+                }
+                
+                
+              }
+              else {
+                bindingParamValue = `${groupID}.${param.name}`;
+  
+                if(param.name == "arrayIndex" || param.name == "arrayIndexStr") { 
+                  //measParamValue = "%index%";
+                  //bindingParamValue = `${groupID}.arrayIndex`
+                  bindingParamValue = "%index%";
+                }
+                else if(param.type == "int") {
+                  measParamValue = parseInt(param.default);
+                }
+                else if (param.type == "double") {
+                  measParamValue = parseFloat(param.default);
+                }
+                else if (param.type == "bool" || param.type == "boolean") {
+                  measParamValue = (param.default === 'true' || param.default === '1');
+                }
+                else {
+                  measParamValue = param.default;
+                }
+              }
+                  
+              //None of these binding call params are currently use, so we will not add them to the measurement caller group
+              if ((param.name != "arrayIndex") && (param.name != "arrayIndexStr") && (param.name != "deferredResults") && (param.name != "formattedResults") && (param.name != "success") && (param.name != "result"))
+              {
+                //Rename the measurementResult param from the binding call to just measurementResult if needed
+                if(param.name == "measurementResultParameter" || param.name == "measurementResultOut") {
+                  MeasurementCallerProps["measurementResult"] = this.generateBaseProperty(`${bindingCallID}.${param.name}`, "double", measDescription);
+                }
+                //else if(param.name == "arrayIndexStr") {
+                //  MeasurementCallerProps["arrayIndex"] = this.generateBaseProperty(measParamValue, paramType, measDescription);  
+                //}
+                else {
+                  MeasurementCallerProps[param.name] = this.generateBaseProperty(measParamValue, paramType, measDescription);
+                }
+              }
+  
+              //If it's an input parameter we need to bind it to the group measurement caller input by setting the property value. Or if its the array index param, we set it to %index%
+              //let bindingCallParmPropertyValue = "";
+              //if(param.direction == "IN") {
+              //  if(param.name == "arrayIndex" || param.name == "arrayIndexStr") { bindingCallParmPropertyValue = "%index%";}
+              //  else {bindingCallParmPropertyValue = `${groupID}.${param.name}`;}
+              //}
+            
+              BindingCallProps[param.name] = this.generateBaseProperty(bindingParamValue, paramType, bindingDescription);
+            });
     
-          this.DocObj.structure[groupID] = this.generateBaseStructure("group", [bindingCallID]);
-          this.DocObj.structure[bindingCallID] = this.generateBaseStructure("bindingCall", []);
-    
-          universalPartNumberChildren.push(groupID);
-        }
-
-      });
-
+            this.DocObj.elements[groupID] = this.generateBaseGroup("group", functionName, "universalPartNumber", "Init", MeasurementCallerProps, true);
+            this.DocObj.elements[groupID].retry = this.generateBaseProperty(0, "builtin", "");
+            this.DocObj.elements[groupID].loop = this.generateBaseProperty(0, "builtin", "");
+  
+            this.DocObj.elements[bindingCallID] = this.generateBaseBindingCall("bindingCall", functionName, groupID, "Init", BindingCallProps, libraryName, func.name, true);
+      
+            this.DocObj.structure[groupID] = this.generateBaseStructure("group", [bindingCallID]);
+            this.DocObj.structure[bindingCallID] = this.generateBaseStructure("bindingCall", []);
+      
+            universalPartNumberChildren.push(groupID);
+          }
+  
+        });
+      }
     })
   
     this.DocObj.structure.universalPartNumber.children = this.DocObj.structure.universalPartNumber.children.concat(universalPartNumberChildren);
+  }
+
+  addInitAndLoad(dciGenLibrariesInfo) {
+
+    //Get the library data for the main project library
+    let projectLibraryData = dciGenLibrariesInfo.get(this.libraryName);
+    let ipteLibraryData = dciGenLibrariesInfo.get("ileft.platform.iptehandler");
+
+    //Generate all the IDs for the init phase
+    let initGroupID = this.getGroupID();
+    let setupID = this.getBindingCallID();
+    let initializeID = this.getBindingCallID();
+    let startMessageID = this.getBindingCallID();
+
+
+    //Generate all the IDs for the load phase
+    let loadGroupID = this.getGroupID();
+    let startOfTestsID = this.getBindingCallID();
+    let waitForReadyID = this.getBindingCallID();
+
+    //Setup the init group
+    this.DocObj.elements[initGroupID] = this.generateBaseGroup("group", "Init", "universalPartNumber", "Init", {}, false);
+    this.DocObj.structure[initGroupID] = this.generateBaseStructure("group", [setupID, initializeID, startMessageID]);
+    this.DocObj.structure.universalPartNumber.children.push(initGroupID);
+
+    //Create the Setup binding call
+    this.DocObj.elements[setupID] = this.generateBaseBindingCall("bindingCall", "Setup", initGroupID, "Init", this.genPhaseBCProps(projectLibraryData.functions.get("Setup").params), this.libraryName, "Setup", false);
+    this.DocObj.structure[setupID] = this.generateBaseStructure("bindingCall", []);
+
+    //Create the Initialize bindingcall
+    let initProps = this.genPhaseBCProps(ipteLibraryData.functions.get("Initialize").params);
+    initProps.expectedFixtureIds.value = "configuration.fixtureId";
+    
+    this.DocObj.elements[initializeID] = this.generateBaseBindingCall("bindingCall", "Initialize", initGroupID, "Init", initProps, "ileft.platform.iptehandler", "Initialize", false);
+    this.DocObj.structure[initializeID] = this.generateBaseStructure("bindingCall", []);
+
+    //Create the Send Start Message binding call
+    this.DocObj.elements[startMessageID] = this.generateBaseBindingCall("bindingCall", "SendStartMessage", initGroupID, "Init", this.genPhaseBCProps(ipteLibraryData.functions.get("SendStartMessage").params), this.libraryName, "SendStartMessage", false);
+    this.DocObj.structure[startMessageID] = this.generateBaseStructure("bindingCall", []);
+
+    //------------------------------------------------------------------------
+
+    //Setup the load group
+    this.DocObj.elements[loadGroupID] = this.generateBaseGroup("group", "Load", "universalPartNumber", "Load", {}, false);
+    this.DocObj.structure[loadGroupID] = this.generateBaseStructure("group", [startOfTestsID, waitForReadyID ]);
+    this.DocObj.structure.universalPartNumber.children.push(loadGroupID);
+
+    //Create the start of tests binding call
+    this.DocObj.elements[startOfTestsID] = this.generateBaseBindingCall("bindingCall", "StartOfTests", loadGroupID, "Load", this.genPhaseBCProps(projectLibraryData.functions.get("StartOfTests").params), this.libraryName, "StartOfTests", false);
+    this.DocObj.structure[startOfTestsID] = this.generateBaseStructure("bindingCall", []);
+
+    //Create the wait for ReadyForToTest binding call
+    this.DocObj.elements[waitForReadyID] = this.generateBaseBindingCall("bindingCall", "WaitForReadyToTest", loadGroupID, "Load", this.genPhaseBCProps(ipteLibraryData.functions.get("WaitForReadyToTest").params), "ileft.platform.iptehandler", "WaitForReadyToTest", false);
+    this.DocObj.structure[waitForReadyID] = this.generateBaseStructure("bindingCall", []);
+  }
+
+  addUnloadAndTeardown(dciGenLibrariesInfo) {
+
+    //Get the library data for the main project library
+    let projectLibraryData = dciGenLibrariesInfo.get(this.libraryName);
+    let ipteLibraryData = dciGenLibrariesInfo.get("ileft.platform.iptehandler");
+
+    //Generate all the IDs for the unload phase
+    let unloadGroupID = this.getGroupID();
+    let endOfTestsID = this.getBindingCallID();
+    let passFailID = this.getEvaluationID()
+    let sendPassFailID = this.getBindingCallID();
+
+    //Generate all the IDs for the teardown phase
+    let tearDownGroupID = this.getGroupID();
+    let tearDownID = this.getBindingCallID();
+    let endMessageID = this.getBindingCallID();
+
+    //Setup the unload group
+    this.DocObj.elements[unloadGroupID] = this.generateBaseGroup("group", "Unload", "universalPartNumber", "Unload", {}, false);
+    this.DocObj.structure[unloadGroupID] = this.generateBaseStructure("group", [endOfTestsID, passFailID, sendPassFailID]);
+    this.DocObj.structure.universalPartNumber.children.push(unloadGroupID);
+
+    //Create the EndOfTests binding call
+    this.DocObj.elements[endOfTestsID] = this.generateBaseBindingCall("bindingCall", "EndOfTests", unloadGroupID, "Unload", this.genPhaseBCProps(projectLibraryData.functions.get("EndOfTests").params), this.libraryName, "EndOfTests", false);
+    this.DocObj.structure[endOfTestsID] = this.generateBaseStructure("bindingCall", []);
+
+    //Create the DetermineArrayPassFail evaluation
+    let passFailEvalProps = {arrayPassFailStatus: this.generateBaseProperty(false, "boolean", "[OUTPUT] arrayPassFailStatus") };
+    let passFailEval = this.generateBaseElement("evaluation", "DetermineArrayPassFail", unloadGroupID, "Unload", passFailEvalProps)
+    passFailEval.evaluationType = this.generateBaseProperty("SCRIPTED", "builtin", "");
+    passFailEval.lowLimit = this.generateBaseProperty("0", "builtin", "");
+    passFailEval.value = this.generateBaseProperty("0", "builtin", "");
+    passFailEval.highLimit = this.generateBaseProperty("0", "builtin", "");
+    passFailEval.runtimeResume = this.generateBaseProperty(true, "builtin", "");
+    passFailEval.updateTestMetrics = this.generateBaseProperty(false, "builtin", "");
+    passFailEval.onEvaluate = this.generateBaseProperty("arrayPassFailStatus = __testMetrics__.isArrayPassing && __testMetrics__.currentRunPassing;", "slot", "");
+    this.DocObj.elements[passFailID] = passFailEval;
+    this.DocObj.structure[passFailID] = this.generateBaseStructure("evaluation", []);
+
+    //Create the SendArrayPassFail BindingCall
+    let sendPassFailProps = this.genPhaseBCProps(ipteLibraryData.functions.get("SendArrayPassFail").params);
+    sendPassFailProps.arrayPassed.value = passFailID + ".arrayPassFailStatus";
+
+    this.DocObj.elements[sendPassFailID] = this.generateBaseBindingCall("bindingCall", "SendArrayPassFail", unloadGroupID, "Unload", sendPassFailProps, "ileft.platform.iptehandler", "SendArrayPassFail", false);
+    this.DocObj.structure[sendPassFailID] = this.generateBaseStructure("bindingCall", []);
+
+    //-----------------------------------------------------------------
+
+    //Setup the teardown group
+    this.DocObj.elements[tearDownGroupID] = this.generateBaseGroup("group", "Teardown", "universalPartNumber", "Teardown", {}, false);
+    this.DocObj.structure[tearDownGroupID] = this.generateBaseStructure("group", [tearDownID, endMessageID]);
+    this.DocObj.structure.universalPartNumber.children.push(tearDownGroupID);
+
+    //Create the teardown binding call
+    this.DocObj.elements[tearDownID] = this.generateBaseBindingCall("bindingCall", "TearDown", tearDownGroupID, "Teardown", this.genPhaseBCProps(projectLibraryData.functions.get("TearDown").params), this.libraryName, "TearDown", false);
+    this.DocObj.structure[tearDownID] = this.generateBaseStructure("bindingCall", []);
+
+    //Create the send end message binding call
+    this.DocObj.elements[endMessageID] = this.generateBaseBindingCall("bindingCall", "SendEndMessage", tearDownGroupID, "Teardown", this.genPhaseBCProps(ipteLibraryData.functions.get("SendEndMessage").params), "ileft.platform.iptehandler", "SendEndMessage", false);
+    this.DocObj.structure[endMessageID] = this.generateBaseStructure("bindingCall", []);
+  }
+
+  genPhaseBCProps(params) {
+    let props = {};
+    params.forEach(param => {
+      let paramType = (param.type == "bool") ? "boolean" : param.type;
+      let measDescription = (param.direction == "OUT" || param.direction == "RETURN") ? "[OUTPUT]" : "[INPUT]";
+      let bindingDescription = (param.description + " " + measDescription).trim();
+
+      props[param.name] = this.generateBaseProperty(param.default, paramType, bindingDescription );
+    })
+
+    return props;
   }
   
   //This should be called every time a new group is created so we increment the group ID number
@@ -182,7 +317,7 @@ class TestPlan {
     }
   }
 
-  generateBaseGroup(type, description = "", parentIdentifier = "", phase = "Body", properties = {}, skipped = false) {
+  generateBaseGroup(type, description, parentIdentifier, phase, properties, skipped) {
     let group = this.generateBaseElement(type, description, parentIdentifier, phase, properties);
     group.skipped = this.generateBaseProperty(skipped, "builtin", "");
     return group;
@@ -282,6 +417,11 @@ class TestPlan {
       })
     })
 
+    //Make sure we have a fixture id config. We'll have to manually add these if the inis don't have it.
+    if(!configProps.hasOwnProperty("fixtureId")) {
+      configProps["fixtureId"] = this.generateBaseProperty("", "string", "");;
+    }
+
     //We want to add a "configuration" property to the testplan doc but not the globals doc
     configProps.configuration = this.generateBaseProperty(true, "boolean", "");
 
@@ -379,10 +519,10 @@ generateGlobalFiles(configProps, INIs) {
     
   })
 
-  //Update the checked out svn exports folder incase it was already checked out.
-  svn.update(projectPath + "/generatedConfig");
-  //Make the the iLEFT station folder is added
-  fs.mkdirSync(`${projectPath}\\generatedConfig\\iLEFT`);
+   //Update the checked out svn exports folder incase it was already checked out.
+   svn.update(projectPath + "/generatedConfig");
+   //Make the the iLEFT station folder is added
+   fs.mkdirSync(`${projectPath}\\generatedConfig\\iLEFT`);
   
   for(let partNum in globalsMaster) {
 
@@ -633,6 +773,10 @@ generateGlobalFiles(configProps, INIs) {
     evaluation.interstitialRetryDelay = this.generateBaseProperty(parseInt(subTestObj.retryDelayMillis), "builtin", "");
     evaluation.preExecuteDelay = this.generateBaseProperty(parseInt(subTestObj.preDelayMillis), "builtin", "");
     evaluation.postExecuteDelay = this.generateBaseProperty(parseInt(subTestObj.postDelayMillis), "builtin", "");
+    
+    
+    
+    
     evaluation.value = this.generateBaseProperty(subTestObj.value, "builtin", "");
     evaluation.highLimit = this.generateBaseProperty(subTestObj.highLimit, "builtin", "");
     evaluation.lowLimit = this.generateBaseProperty(subTestObj.lowLimit, "builtin", "");
@@ -640,21 +784,31 @@ generateGlobalFiles(configProps, INIs) {
     evaluation.target = this.generateBaseProperty(target, "builtin", "");
     evaluation.skipped = this.generateBaseProperty(false, "builtin", "");
     evaluation.updateTestMetrics = this.generateBaseProperty(true, "builtin", "");
-    evaluation.runtimeRusume = this.generateBaseProperty(true, "builtin", "");
+    evaluation.runtimeResume = this.generateBaseProperty(true, "builtin", "");
     evaluation.properties = properties;
 
     return evaluation;
   }
 
-  generateBaseBindingCall(type, description = "", parentIdentifier = "", phase = "Body", properties = {}, library = "", method = "") {
+  generateBaseBindingCall(type, description = "", parentIdentifier = "", phase = "Body", properties = {}, library = "", method = "", runtimeResume = true) {
     let bindingCall = this.generateBaseElement(type, description, parentIdentifier, phase, properties);
     bindingCall.loop = this.generateBaseProperty(0, "builtin", "");
     bindingCall.retry = this.generateBaseProperty(0, "builtin", "");
     bindingCall.skipped = this.generateBaseProperty(false, "builtin", "");
     bindingCall.updateTestMetrics = this.generateBaseProperty(false, "builtin", "");
-    bindingCall.runtimeRusume = this.generateBaseProperty(true, "builtin", "");
+    bindingCall.runtimeResume = this.generateBaseProperty(runtimeResume, "builtin", "");
     bindingCall.library = this.generateBaseProperty(library, "builtin", "");
-    bindingCall.method = this.generateBaseProperty("TestBinaryServiceImpl_" + method, "builtin", "");
+    let methodValue;
+    if(library == "ileft.testmethods.instrumentcontrol") {
+      methodValue = "IleftInstrumentsTestMethods_" + method;
+    }
+    else if(library == "ileft.platform.iptehandler") {
+      methodValue = "iptehandler_" + method;
+    }
+    else {
+      methodValue = "TestBinaryServiceImpl_" + method;
+    }
+    bindingCall.method = this.generateBaseProperty(methodValue, "builtin", "");
     return bindingCall;
   }
 

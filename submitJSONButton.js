@@ -22,12 +22,17 @@ function onSubmitFile() {
   //Get the uuid and create the meta data string
   const my_uuid = uuid_api.get();
   let metaDataStr = `jobUuid: "${my_uuid}", metadata: { revisionLabel: "", commitMessage: "Commit through GraphQL Mutation", softwareVersion: "1.0.0"}`;
+
+  console.log(createMutationStr(my_uuid));
   
   //Put it all together to create the data to seld
   let dataToSend = {query: "mutation {saveTestPlanDocument( domain: Engineering, document: " + theTestPlanJSstr + ", " + metaDataStr + ")}", variables: {}};
   
   document.getElementById("output1").value = theTestPlan.getDocObjAsJSstr(true);
+  //console.log(JSON.stringify(dataToSend, null, 2))
   xhr_TPE_Mutation.send(JSON.stringify(dataToSend));
+
+  
 
   //submit the config data
   svn.commit(`${projectPath}\\generatedConfig`);
@@ -38,3 +43,20 @@ xhr_TPE_Mutation.addEventListener("readystatechange", function() {
     output1.value = this.responseText;
   }
 });
+
+function createMutationStr(my_uuid) {
+  let mutationStr = 
+  `mutation {
+    saveTestPlanDocument (
+      domain: Engineering,
+      document: ${theTestPlan.getDocObjAsJSstr(true)},
+      jobUuid: "${my_uuid}",
+      metadata: {
+        revisionLabel: "",
+        commitMessage: "Commit through GraphQL Mutation",
+        softwareVersion: "1.0.0"
+      }
+    )
+  }`
+  return mutationStr;
+}

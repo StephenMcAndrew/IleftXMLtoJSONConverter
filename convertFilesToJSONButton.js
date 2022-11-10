@@ -61,21 +61,22 @@ async function onConvert() {
 
     theTestPlan.addMeasurementCallers(dciGenLibrariesInfo, testPlanMethods);
 
+    theTestPlan.addInitAndLoad(dciGenLibrariesInfo);
+
     theTestPlan.addPartNumbers(INIs);
 
     theTestPlan.addTestGroups(testPlanArray);
 
+    theTestPlan.addUnloadAndTeardown(dciGenLibrariesInfo);
     
     theTestPlan.addConfiguration(INIs);
-    
-    //console.log(dciGenLibrariesInfo);
 
-    
+    //console.log(dciGenLibrariesInfo);
 
     console.log(theTestPlan.DocObj);
     
 
-    console.log(theTestPlan.JSONstr_To_JSstr(JSON.stringify(theTestPlan.DocObj, null, 2)));
+    console.log(TestPlan.JSONstr_To_JSstr(JSON.stringify(theTestPlan.DocObj, null, 2)));
 
 
     //theTestPlan.addTestMethods()
@@ -147,6 +148,10 @@ function getTestBinaries(xmlDocArray)
             testBinary_Node = testBinary_Nodes.iterateNext();
         }
     });
+
+    //We also need the IPTE library
+    masterTestBinaryArray.push("ileft.platform.iptehandler");
+
     return masterTestBinaryArray;
 }
 
@@ -162,37 +167,42 @@ Map{
         value => {
             versionNumber: "3.0.0",
             platformName: "windows-x32-any"
-            functions: [
-                {
-                   name: "TestMethodName",
-                   description: "This test method does something",
-                   className: "TestBinaryServiceImpl",
-                   classDescription: "A DCIGen class description"
-                   params: [
-                      {
-                        name: "TestMethodParamName",
-                        type: "string",
-                        enumName: "",
-                        direction: "OUT" (or "IN"),
-                        description: "this is a parameter"
-                        default: "";
-                      },
-                      ... 
-                   ]
-                },
+            functions: Map{
+				[
+					key => "TestMethodName"
+					value => {
+						name: "TestMethodName",
+						description: "This test method does something",
+						className: "TestBinaryServiceImpl",
+						classDescription: "A DCIGen class description"
+						params: [
+							{
+								name: "TestMethodParamName",
+								type: "string",
+								enumName: "",
+								direction: "OUT" (or "IN"),
+								description: "this is a parameter"
+								default: "";
+						
+							},
+							...
+						]
+					}
+				],
                 ...
-            ]
-        }   
+			}
+		}
     ],
-    ...
+	...
 }
 */
 function getDciGenLibrariesInfo(testBinaries) { 
     const dciGenLibrariesInfo = new Map();
+    const url_TPE =  "https://testplaneditor-qa.gentex.com/graphql";
+
     testBinaries.forEach(testBinary => {
         
         const xhr_TPE = new XMLHttpRequest();
-        const url_TPE =  "https://testplaneditor-qa.gentex.com/graphql";
 
         //Open the XHR object to make the json request and set the needed header info
         xhr_TPE.open("POST", url_TPE, false);
@@ -229,7 +239,16 @@ function getDciGenLibrariesInfo(testBinaries) {
         let response = JSON.parse(xhr_TPE.responseText);
         const versions = response.data.library.versions;
         dciGenLibrariesInfo.set(testBinary, versions[versions.length - 1]);
+
+        //Instead of having the function objects in an array, we put them in a map for easier searching.
+        dciGenLibrariesInfo.get(testBinary).functions = new Map(
+            dciGenLibrariesInfo.get(testBinary).functions.map( func => {
+                return [func.name, func];
+            })
+        )    
+
     });
+
     return dciGenLibrariesInfo;
 }
 
@@ -495,9 +514,9 @@ function parseXMLDocsAndINsToJSObjArray(xmlDocArray, INIs){
                 subTest.limitCheckEval = subTest_node.getElementsByTagName("m_limitCheckEval")[0].childNodes[0].nodeValue;
                 subTest.exactValEval = subTest_node.getElementsByTagName("m_exactValEval")[0].childNodes[0].nodeValue;
                 subTest.collectDataEval = subTest_node.getElementsByTagName("m_collectDataEval")[0].childNodes[0].nodeValue;
-                subTest.lowLimit = subTest_node.getElementsByTagName("m_lowLimit")[0].childNodes[0].nodeValue;
-                subTest.value = subTest_node.getElementsByTagName("m_value")[0].childNodes[0].nodeValue;
-                subTest.highLimit = subTest_node.getElementsByTagName("m_highLimit")[0].childNodes[0].nodeValue;
+                subTest.lowLimit = roundNumString(subTest_node.getElementsByTagName("m_lowLimit")[0].childNodes[0].nodeValue);
+                subTest.value = roundNumString(subTest_node.getElementsByTagName("m_value")[0].childNodes[0].nodeValue);
+                subTest.highLimit = roundNumString(subTest_node.getElementsByTagName("m_highLimit")[0].childNodes[0].nodeValue);
                 subTest.preDelayMillis = subTest_node.getElementsByTagName("m_preDelayMillis")[0].childNodes[0].nodeValue;
                 subTest.postDelayMillis = subTest_node.getElementsByTagName("m_postDelayMillis")[0].childNodes[0].nodeValue;
                 subTest.loopCount = subTest_node.getElementsByTagName("m_loopCount")[0].childNodes[0].nodeValue;
@@ -600,5 +619,16 @@ function extractTestMethodsFromXMLDocArray(xmlDocArray) {
 //Add a method that makes the first letter of a string lower case to the String object
 String.prototype.firstToLowerCase = function() {
     return this.charAt(0).toLowerCase() + this.slice(1);
+}
+
+function roundNumString(numStr) {
+    let splitNumStr = numStr.split("e");
+    if (splitNumStr.length > 1){
+        //Seems like there should be a better way.
+        return parseFloat(parseFloat(splitNumStr[0]).toFixed(5)).toString() + "e" + splitNumStr[1];
+    }
+    else {
+        return parseFloat(parseFloat(splitNumStr[0]).toFixed(5)).toString();
+    }
 }
 
