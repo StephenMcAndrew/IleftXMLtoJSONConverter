@@ -8,6 +8,7 @@ function onINISelector() {
         alert("Please acquire a valid bearer token first.");
         return 0;
     }
+    
     //Send out the file selector clicked signal
     document.getElementById('ini-selector').click()
 }

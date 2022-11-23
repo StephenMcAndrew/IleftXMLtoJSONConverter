@@ -8,11 +8,13 @@ let selectedFiles = [];
 
 function onFileSelector() {
     
+    
     //Alert the user if they have not gotten a bearer token yet
     if(typeof bearerToken == 'undefined') {
         alert("Please acquire a valid bearer token first.");
         return 0;
     }
+    
     //Send out the file selector clicked signal
     document.getElementById('file-selector').click()
 }

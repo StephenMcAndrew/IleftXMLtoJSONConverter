@@ -25,6 +25,7 @@ async function onConvert() {
     //console.log(iniStringArray);
     const INIs = parseINIsToJSObjArray(iniStringArray);
 
+    //Your local path to your project
     projectPath = xmlStringArray[0].path.substring(0, xmlStringArray[0].path.lastIndexOf("\\"));
 
     //Create the testplan export forlder. If it already exists, the mkdir command throws and error and does nothing
@@ -42,12 +43,13 @@ async function onConvert() {
     //Parse each xml doc into a JavaScript object. 
     const testPlanArray = parseXMLDocsAndINsToJSObjArray(xmlDocArray, INIs);
 
-    console.log(INIs);
+    //console.log(INIs);
     //console.log(testPlanArray);
   
     //Get all the test binaries from the xml docs
     const testBinaries = getTestBinaries(xmlDocArray);
 
+    //Get all the methods used in the .planxml test plans. We only want to add measurement callers for the test methods we use from the DCIGen library
     let testPlanMethods = extractTestMethodsFromXMLDocArray(xmlDocArray);
     //console.log(testPlanMethods);
 
@@ -59,17 +61,23 @@ async function onConvert() {
     //Create the TestPlan object
     theTestPlan = new TestPlan();
 
+    //Add all the measurement callers for the test methods used in the testplan. We use the DCIGen library info to create the measurement callers.
     theTestPlan.addMeasurementCallers(dciGenLibrariesInfo, testPlanMethods);
 
+    //Generate the Init and Load phases 
     theTestPlan.addInitAndLoad(dciGenLibrariesInfo);
 
+    //Add all the part numbers from the INIs to the converted testplan
     theTestPlan.addPartNumbers(INIs);
 
+    //Add all the test groups along with all the subtests
     theTestPlan.addTestGroups(testPlanArray);
 
+    //Generate the Unload and Teardown phases
     theTestPlan.addUnloadAndTeardown(dciGenLibrariesInfo);
     
-    theTestPlan.addConfiguration(INIs);
+    //Generate the config element. Add all the configuration key value pairs. Generate the json globals file.
+    theTestPlan.addConfiguration(INIs, testPlanArray);
 
     //console.log(dciGenLibrariesInfo);
 
@@ -411,6 +419,9 @@ function parseINIsToJSObjArray(iniStringArray){
         fileName: "700-0766.planxml",
         partNumbers: [700-5200, ...],
         testBinaries: ["testBinary1", ...],
+        config_file: Instruments_3up_Reverse.cfg,
+        nodeMap_file: NodeMap700-0766.cfg,
+        gPdig_file: GP700-0766.cfg,
         testGroups: [
             {
                 name: "UUT_Pwr",
@@ -474,6 +485,23 @@ function parseXMLDocsAndINsToJSObjArray(xmlDocArray, INIs){
             })
         })
         testPlan.partNumbers = associatedPartNumbers;
+
+        let configFile_Nodes = xmlDoc.doc.evaluate("/boost_serialization/testPlan/m_testStations/item/m_testBinarySetupArgs/item/second/item", xmlDoc.doc, null, XPathResult.ANY_TYPE, null);
+        let configFile_Node = configFile_Nodes.iterateNext();
+
+        while(configFile_Node) {
+            const key_value = configFile_Node.childNodes[0].nodeValue.split("=");
+            if(key_value[0] == "config_file") {
+                testPlan.config_file = key_value[1];
+            }
+            else if(key_value[0] == "NodeMap_file") {
+                testPlan.nodeMap_file = key_value[1];
+            }
+            else if(key_value[0] == "GPdig_file") {
+                testPlan.gPdig_file = key_value[1];
+            }
+            configFile_Node = configFile_Nodes.iterateNext();
+        }
 
         //Get the test binaries used by this testplan
         const testBinaryArry  = [];

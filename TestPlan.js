@@ -2,13 +2,16 @@
 class TestPlan {
 
   constructor(testBinary) {
+
     this.username = document.getElementById("username").value;
-    this.DocObj = JSON.parse(this.templateTPDocStr(this.username));
+
+    this.DocObj = JSON.parse(this.templateTPDocStr(this.username))
+    
     this.libraryName; //The main test methods library name. i.e., not "ileft.testmethods.instrumentscontrol".
     this.partNumbers; //An array of all the partnumbers
 
     // Uses this to keep track of which groupID goes with which measurement caller
-    // Map{[key => MeasurementCallerName_Meas value => {library: libraryName, groupID: groupID}]}
+    // Map{[key => MeasurementCallerName value => {library: libraryName, groupID: groupID}]}
     this.measurementCallerMap = new Map();
   }
 
@@ -382,7 +385,7 @@ class TestPlan {
     INIs.forEach(ini => {
       //Loop through the part number sections in each ini file
       ini.partNumbers.forEach(partNumber => {
-        //Get the number od indexes from the ini param
+        //Get the number of indexes from the ini param
         numberOfIndexes = partNumber.params.get("indexMapping").split(",").length;
         //If this is a part number we have not added yet, add it
         if (!masterListOfPartNumbers.includes(partNumber.seven_o_five)) {
@@ -403,160 +406,206 @@ class TestPlan {
     this.partNumbers = masterListOfPartNumbers;
   }
 
- addConfiguration(INIs){
-  let configProps = {};
-  const masterConfigMap = new Map();
-    INIs.forEach(ini => {
-      ini.partNumbers.forEach(partNumber => {
-        partNumber.params.forEach((value, key) => {
-          if(!masterConfigMap.has(key) && key != "description") {
-            masterConfigMap.set(key, value);
-            configProps[key] = this.generateBaseProperty("", "string", "");
-          }
+  addConfiguration(INIs, testPlanArray){
+    let configProps = {};
+    const masterConfigArray = [];
+      INIs.forEach(ini => {
+        ini.partNumbers.forEach(partNumber => {
+          partNumber.params.forEach((value, key) => {
+            if(!masterConfigArray.includes(key) && key != "description") {
+              masterConfigArray.push(key);
+              configProps[key] = this.generateBaseProperty("", "string", "");
+            }
+          })
         })
       })
-    })
-
-    //Make sure we have a fixture id config. We'll have to manually add these if the inis don't have it.
-    if(!configProps.hasOwnProperty("fixtureId")) {
-      configProps["fixtureId"] = this.generateBaseProperty("", "string", "");;
-    }
-
-    //We want to add a "configuration" property to the testplan doc but not the globals doc
-    configProps.configuration = this.generateBaseProperty(true, "boolean", "");
-
-    this.DocObj.elements.configuration = this.generateBaseElement("configuration", "Configuration", "universalPartNumber", "Init", configProps);
-    this.DocObj.structure.universalPartNumber.children.unshift("configuration");
-    this.DocObj.structure.configuration = this.generateBaseStructure("configuration", ["configScript"])
-
-    this.DocObj.elements.configScript = this.generateBaseElement("evaluation", "configScript", "configuration", "Init", {});
-    this.DocObj.elements.configScript.loop = this.generateBaseProperty(0,"builtin", "");
-    this.DocObj.elements.configScript.retry = this.generateBaseProperty(0,"builtin", "");
-    this.DocObj.elements.configScript.skipped = this.generateBaseProperty(false,"builtin", "");
-    this.DocObj.elements.configScript.updateTestMetrics = this.generateBaseProperty(false,"builtin", "");
-    this.DocObj.elements.configScript.runtimeResume = this.generateBaseProperty(false,"builtin", "");
-    this.DocObj.elements.configScript.value = this.generateBaseProperty("0","builtin", "");
-    this.DocObj.elements.configScript.highLimit = this.generateBaseProperty("0.0000e0","builtin", "");
-    this.DocObj.elements.configScript.lowLimit = this.generateBaseProperty("0.0000e0","builtin", "");
-    this.DocObj.elements.configScript.evaluationType = this.generateBaseProperty("SCRIPTED","builtin", "");
-    this.DocObj.elements.configScript.onEvaluate = this.generateBaseProperty("Tue Sep 27 08:21:11 2022","slot", "");
-    this.DocObj.structure.configScript = this.generateBaseStructure("evaluation", []);
-
-    this.generateGlobalFiles(configProps, INIs);
-
-
- }
-
-generateGlobalFiles(configProps, INIs) {
-  let globalsMaster = {};
-  const ecoNumsMaster = new Set();
-
-  //Generate the defaults 
-  let defaults = {};
-  for(var key in configProps) {
-    if (configProps.hasOwnProperty(key)) {
-      if (key != "configuration"){ defaults[key] = ""; }
-    }
+  
+      configProps.config_file = this.generateBaseProperty("", "string", "");
+      configProps.nodeMap_file = this.generateBaseProperty("", "string", "");
+      configProps.gPdig_file = this.generateBaseProperty("", "string", "");
+      
+      //Make sure we have a fixture id config. We'll have to manually add these if the inis don't have it.
+      if(!configProps.hasOwnProperty("fixtureId")) {
+        configProps["fixtureId"] = this.generateBaseProperty("", "string", "");;
+      }
+  
+      //We want to add a "configuration" property to the testplan doc but not the globals doc
+      configProps.configuration = this.generateBaseProperty(true, "boolean", "");
+  
+      this.DocObj.elements.configuration = this.generateBaseElement("configuration", "Configuration", "universalPartNumber", "Init", configProps);
+      this.DocObj.structure.universalPartNumber.children.unshift("configuration");
+      this.DocObj.structure.configuration = this.generateBaseStructure("configuration", ["configScript"])
+  
+      this.DocObj.elements.configScript = this.generateBaseElement("evaluation", "configScript", "configuration", "Init", {});
+      this.DocObj.elements.configScript.loop = this.generateBaseProperty(0,"builtin", "");
+      this.DocObj.elements.configScript.retry = this.generateBaseProperty(0,"builtin", "");
+      this.DocObj.elements.configScript.skipped = this.generateBaseProperty(false,"builtin", "");
+      this.DocObj.elements.configScript.updateTestMetrics = this.generateBaseProperty(false,"builtin", "");
+      this.DocObj.elements.configScript.runtimeResume = this.generateBaseProperty(false,"builtin", "");
+      this.DocObj.elements.configScript.value = this.generateBaseProperty("0","builtin", "");
+      this.DocObj.elements.configScript.highLimit = this.generateBaseProperty("0.0000e0","builtin", "");
+      this.DocObj.elements.configScript.lowLimit = this.generateBaseProperty("0.0000e0","builtin", "");
+      this.DocObj.elements.configScript.evaluationType = this.generateBaseProperty("SCRIPTED","builtin", "");
+      this.DocObj.elements.configScript.onEvaluate = this.generateBaseProperty("Tue Sep 27 08:21:11 2022","slot", "");
+      this.DocObj.structure.configScript = this.generateBaseStructure("evaluation", []);
+  
+      this.generateGlobalFiles(configProps, INIs, testPlanArray);
   }
-  //Add the defaults to the globalsMaster
-  this.partNumbers.forEach(partNum => {
-    globalsMaster[partNum] = {};
-    globalsMaster[partNum].Defaults = structuredClone(defaults);
-  });
 
-  INIs.forEach(ini => {     
-    ini.partNumbers.forEach(partNumberSection => {
-
-      let partNum = partNumberSection.seven_o_five;
-      let ecoNum = partNumberSection.params.get("eCNum");
-      ecoNumsMaster.add(ecoNum);
-      let ecoObj = structuredClone(defaults);
-
-      partNumberSection.params.forEach((value, key) =>{
-        ecoObj[key] = value;
-      })
-
-      ini.sections.forEach(commSection =>{
-        commSection.params.forEach((value, key) =>{
+  generateGlobalFiles(configProps, INIs, testPlanArray) {
+    let globalsMaster = {};
+    const ecoNumsMaster = new Set();
+  
+    //Generate the defaults 
+    let defaults = {};
+    for(var key in configProps) {
+      if (configProps.hasOwnProperty(key)) {
+        if (key != "configuration"){ defaults[key] = ""; }
+      }
+    }
+  
+    //Add the defaults to the globalsMaster
+    this.partNumbers.forEach(partNum => {
+      globalsMaster[partNum] = {};
+      globalsMaster[partNum].Defaults = structuredClone(defaults);
+      globalsMaster[partNum].Defaults.config_file = "";
+      globalsMaster[partNum].Defaults.nodeMap_file = "";
+      globalsMaster[partNum].Defaults.gPdig_file = "";
+    });
+  
+    INIs.forEach(ini => {     
+      ini.partNumbers.forEach(partNumberSection => {
+  
+        let partNum = partNumberSection.seven_o_five;
+        let ecoNum = partNumberSection.params.get("eCNum");
+        ecoNumsMaster.add(ecoNum);
+        let ecoObj = structuredClone(defaults);
+  
+        partNumberSection.params.forEach((value, key) =>{
           ecoObj[key] = value;
         })
-      })
-
-      globalsMaster[partNum][ecoNum] = ecoObj;
-    })
-  })
-
-  /*
-  //We need sort the ECO numbers
-  //Create a int values to the actual ECO name. Also create an array of the ECO int values to sort. 
-  const ecoNumArray = [];
-  let ecoNumToNameMap = new Map();
-  ecoNumsMaster.forEach(ecoName => {
-    let ecoNumber = parseInt(ecoName.replace(/\D/g,''));
-    ecoNumToNameMap.set(ecoNumber, ecoName);
-    ecoNumArray.push(ecoNumber);
-  })
-
-  ecoNumArray.sort((a,b) => {return a - b})
   
-  console.log(ecoNumArray);
-  */
+        ini.sections.forEach(commSection =>{
+          commSection.params.forEach((value, key) =>{
+            ecoObj[key] = value;
+          })
+        })
+  
+        globalsMaster[partNum][ecoNum] = structuredClone(ecoObj);
+      })
+    })
 
-  //Now add every ECO to every part number
-  this.partNumbers.forEach(partNumber => {
-    ecoNumsMaster.forEach(ecoNum => {
-      if (!globalsMaster[partNumber].hasOwnProperty(ecoNum)) {
-        for(let existingEco in globalsMaster[partNumber]){
-          
-          let islocked = globalsMaster[partNumber][existingEco].hasOwnProperty("lockEC") && globalsMaster[partNumber][existingEco].lockEC == "true";
-
-          if(globalsMaster[partNumber].hasOwnProperty(existingEco) && existingEco != "Defaults" && !islocked) {
-            globalsMaster[partNumber][ecoNum] = structuredClone(globalsMaster[partNumber][existingEco]);
+    //Add the config file key values from the testplan 
+      testPlanArray.forEach(testPlan => {
+        testPlan.partNumbers.forEach(partNumber => {
+          for(let eco in globalsMaster[partNumber]) {
+            if( eco != "Defaults") {
+              globalsMaster[partNumber][eco].config_file = testPlan.config_file;
+              globalsMaster[partNumber][eco].nodeMap_file = testPlan.nodeMap_file;
+              globalsMaster[partNumber][eco].gPdig_file = testPlan.gPdig_file;
+            }
+          }
+        })
+      })
+  
+      
+    //Now add every ECO to every part number
+    this.partNumbers.forEach(partNumber => {
+      ecoNumsMaster.forEach(ecoNum => {
+        if (!globalsMaster[partNumber].hasOwnProperty(ecoNum)) {
+          for(let existingEco in globalsMaster[partNumber]){
+            
+            let islocked = globalsMaster[partNumber][existingEco].hasOwnProperty("lockEC") && globalsMaster[partNumber][existingEco].lockEC == "true";
+  
+            if(globalsMaster[partNumber].hasOwnProperty(existingEco) && existingEco != "Defaults" && !islocked) {
+              globalsMaster[partNumber][ecoNum] = structuredClone(globalsMaster[partNumber][existingEco]);
+            }
           }
         }
-      }
+      })
+      
     })
-    
-  })
-
-   //Update the checked out svn exports folder incase it was already checked out.
-   svn.update(projectPath + "/generatedConfig");
-   //Make the the iLEFT station folder is added
-   fs.mkdirSync(`${projectPath}\\generatedConfig\\iLEFT`);
   
-  for(let partNum in globalsMaster) {
+     //Update the checked out svn exports folder incase it was already checked out.
+     svn.update(projectPath + "/generatedConfig");
+     //Make the the iLEFT station folder is added
+     fs.mkdirSync(`${projectPath}\\generatedConfig\\iLEFT`);
+    
+    for(let partNum in globalsMaster) {
+  
+      //Make sure we create the part number folders
+      fs.mkdirSync(`${projectPath}\\generatedConfig\\${partNum}`);
+      //Write the globals to the part number folders
+      fs.writeFileSync(`${projectPath}\\generatedConfig\\${partNum}\\globals.json`, JSON.stringify(globalsMaster[partNum]), "utf-8");
+      //Make sure the iLEFT station folder is created
+      fs.mkdirSync(`${projectPath}\\generatedConfig\\${partNum}\\iLEFT`);
+      //Make sure we have the empty limits and locals files
+      fs.writeFileSync(`${projectPath}\\generatedConfig\\${partNum}\\iLEFT\\limits.json`, "", "utf-8");
+      fs.writeFileSync(`${projectPath}\\generatedConfig\\${partNum}\\iLEFT\\locals.json`, "", "utf-8");  
+    }
 
-    //Make sure we create the part number folders
-    fs.mkdirSync(`${projectPath}\\generatedConfig\\${partNum}`);
-    //Write the globals to the part number folders
-    fs.writeFileSync(`${projectPath}\\generatedConfig\\${partNum}\\globals.json`, JSON.stringify(globalsMaster[partNum]), "utf-8");
-    //Make sure the iLEFT station folder is created
-    fs.mkdirSync(`${projectPath}\\generatedConfig\\${partNum}\\iLEFT`);
-    //Make sure we have the empty limits and locals files
-    fs.writeFileSync(`${projectPath}\\generatedConfig\\${partNum}\\iLEFT\\limits.json`, "", "utf-8");
-    fs.writeFileSync(`${projectPath}\\generatedConfig\\${partNum}\\iLEFT\\locals.json`, "", "utf-8");  
+    //Force add any new config files and commit to svn
+    svn.add(`${projectPath}\\generatedConfig`);
+  
+    //Now we need to copy over the config files
+    this.addConfigFiles();
   }
-}
+
+  addConfigFiles() {
+    let testMethodFolderName = this.libraryName.replace("ileft.testmethods.", "");
+    console.log(testMethodFolderName);
+    let svnTestMethodsPath = `http://vcs.gentex.com/svn/testers/ea/iLEFT2/TestMethods`;
+
+    const testMethodsLowerCaseMap = new Map( 
+      svn.ls(svnTestMethodsPath).split("/").map(folder => {
+      return [folder.trim().toLowerCase(), folder.trim()];
+      })
+    );
+    console.log(testMethodsLowerCaseMap);
+
+    if(testMethodsLowerCaseMap.has(testMethodFolderName)) {
+      let svnPath = svnTestMethodsPath + `/` + testMethodsLowerCaseMap.get(testMethodFolderName) + `/trunk/resources/`;
+      const configFiles = svn.ls(svnPath).split("\n").forEach(file => {
+        if(file != "") {
+          svn.copy(svnPath + "/" + file.trim(), `${projectPath}\\generatedConfig\\iLEFT`);
+          console.log(svnPath + "/" + file.trim());
+        }
+      })
+    }
+    else {
+      alert("Could not deduce TestMethods svn folder name. You must copy the contents of the TestMethods resources folder to the newly created \\generatedConfig\\iLEFT folder manually.");
+    }
+  }
 
   addTestGroups(testPlanArray) {
     const masterTestGroupList = new Map();
     let firstTestPlan = true;
     let previousGroupId = "";
+  
+    let lowerCaseMCArray = [];
+    this.measurementCallerMap.forEach((value, key) => {
+      lowerCaseMCArray.push(key.toLowerCase())
+    })
+
     testPlanArray.forEach(testPlan =>{
       testPlan.testGroups.forEach((testGroup, index, testGroupsArray) => {
+
+        //A measurement subroutine and test group can't have the same name. Rename the test group if it has the same name as a subroutine.
+        let uniqueTestGroupName = lowerCaseMCArray.includes(testGroup.name.toLowerCase()) ? testGroup.name + "Group" : testGroup.name;
+
         //Add the test group if it has not been added yet
-        if(!masterTestGroupList.has(testGroup.name)) {
-
+        if(!masterTestGroupList.has(uniqueTestGroupName)) {
+  
           const newGroupId = this.getGroupID();
-          masterTestGroupList.set(testGroup.name, {groupID: newGroupId, associatedPartNumbers: testPlan.partNumbers, arrayOfSubTests: [testGroup.subTests]});
-
-          let theTestGroup = this.generateBaseGroup("group", testGroup.name, "universalPartNumber", "Body", {}, false);
+          masterTestGroupList.set(uniqueTestGroupName, {groupID: newGroupId, associatedPartNumbers: testPlan.partNumbers, arrayOfSubTests: [testGroup.subTests]});
+  
+          let theTestGroup = this.generateBaseGroup("group", uniqueTestGroupName, "universalPartNumber", "Body", {}, false);
           theTestGroup.loop = this.generateBaseProperty(0, "builtin", "");
           theTestGroup.retry = this.generateBaseProperty(0, "builtin", "");
-
+  
           this.DocObj.elements[newGroupId] = theTestGroup;
           this.DocObj.structure[newGroupId] = this.generateBaseStructure("group", []);
-
+  
           //We need to insert the groupId in the correct location in the universalPartNumber children array
           if((previousGroupId != "") && (!firstTestPlan) && ((this.DocObj.structure.universalPartNumber.children.findIndex((element) => { return element == previousGroupId; }) + 1) < this.DocObj.structure.universalPartNumber.children.length)) {
             this.DocObj.structure.universalPartNumber.children.splice(this.DocObj.structure.universalPartNumber.children.findIndex((element) => { return element == previousGroupId; }) + 1, 0, newGroupId);
@@ -568,14 +617,14 @@ generateGlobalFiles(configProps, INIs) {
         }
         else {
           //Add any new associated part number from the testplan
-          masterTestGroupList.get(testGroup.name).associatedPartNumbers = Array.from(new Set(masterTestGroupList.get(testGroup.name).associatedPartNumbers.concat(testPlan.partNumbers)) );
-          masterTestGroupList.get(testGroup.name).arrayOfSubTests.push(testGroup.subTests);
-          previousGroupId = (masterTestGroupList.get(testGroup.name)).groupID;
+          masterTestGroupList.get(uniqueTestGroupName).associatedPartNumbers = Array.from(new Set(masterTestGroupList.get(uniqueTestGroupName).associatedPartNumbers.concat(testPlan.partNumbers)) );
+          masterTestGroupList.get(uniqueTestGroupName).arrayOfSubTests.push(testGroup.subTests);
+          previousGroupId = (masterTestGroupList.get(uniqueTestGroupName)).groupID;
         }
       })
       firstTestPlan = false;
     })
-
+  
     masterTestGroupList.forEach((testGroupData, testGroupName, thisMap) => {
       //For each test group, the masterTestGroupList has an array of subtest arrays from each test plan we need to combine them into a single array of subtest that we can use to generate the evaluations.
       let masterSubTestArray = this.combineSubTests(testGroupData.arrayOfSubTests);
@@ -587,7 +636,7 @@ generateGlobalFiles(configProps, INIs) {
       
       masterSubTestArray.forEach(subTest => {
         const evaluationID = this.getEvaluationID();
-
+  
         //We have to be smart about how find the groupID of the measurement caller we want to use with this evaluation
         let measurementCaller = `${subTest.testMethod}`;
         let i = 2;
@@ -597,11 +646,11 @@ generateGlobalFiles(configProps, INIs) {
         }
         let measurementCallerID = this.measurementCallerMap.get(measurementCaller).groupID;
         //let bindingCallID = this.measurementCallerMap.get(measurementCaller).bindingCallID;
-
+  
         //The DCIGen WriteAquiredWaveformToFile_OnFailure method takes a bool as the testFailed param instead of a string like in the old testmethod. 
         //We need to parse the old string param and use that to generate a script that will output a true or false value 
         if(subTest.testMethod == "WriteAquiredWaveformToFile_OnFailure") {
-
+  
         }
         
         //create the evaluation parameters
@@ -611,7 +660,7 @@ generateGlobalFiles(configProps, INIs) {
           if( this.DocObj.elements[measurementCallerID].properties.hasOwnProperty(property)) {
             
             evaluationProps[property] = structuredClone(this.DocObj.elements[measurementCallerID].properties[property]);
-
+  
             let propertyValue;
             if(this.DocObj.elements[measurementCallerID].description == "WriteAquiredWaveformToFile_OnFailure" && property == "testFailed") {
               propertyValue = false;
@@ -644,13 +693,13 @@ generateGlobalFiles(configProps, INIs) {
         
         this.DocObj.elements[evaluationID] = evaluation;
         this.DocObj.structure[evaluationID] = this.generateBaseStructure("evaluation", []);
-
+  
         this.DocObj.structure[testGroupData.groupID].children.push(evaluationID);
-
+  
       })
     })
-  }
-
+  }  
+  
   combineSubTests(arrayOfSubTests) {
     const masterSubTestMap = new Map();
     const masterSubTestOrder = [];
@@ -710,7 +759,6 @@ generateGlobalFiles(configProps, INIs) {
     }) 
     return subTestArrayToReturn;
   }
-
 
   areSubTestsSimilar(subtest1, subtest2) {
     let name = subtest1.name == subtest2.name;

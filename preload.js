@@ -2,8 +2,8 @@ const { contextBridge } = require('electron');
 const { v1: uuidv1 } = require('uuid');
 const  fs = require('fs');
 const path = require('path');
+const { url } = require('inspector');
 const execSync = require('child_process').execSync;
-
 
 contextBridge.exposeInMainWorld('uuid_api', {
     get: () => uuidv1()
@@ -12,7 +12,7 @@ contextBridge.exposeInMainWorld('uuid_api', {
 contextBridge.exposeInMainWorld('path', {
     format: (pathObj) => path.format(pathObj),
 });
-
+5
 contextBridge.exposeInMainWorld('fs', {
     writeFileSync: (file, data, option) => fs.writeFileSync(file, data, option),
     mkdirSync: pathStr => fs.mkdirSync(pathStr, { recursive: true }),
@@ -24,20 +24,31 @@ contextBridge.exposeInMainWorld('svn', {
         try { execSync(`svn mkdir ${dirURL} -m "Directory added through IleftXMLtoJSONConverter"`, { encoding: 'utf-8' }); }
         catch(e) { console.log(e.message); }
     },
-    checkout: (url, path) => {
-        try { execSync(`svn checkout ${url} ${path}`, { encoding: 'utf-8' }); }
+    checkout: (url, localPath) => {
+        try { execSync(`svn checkout ${url} ${localPath}`, { encoding: 'utf-8' }); }
         catch(e) { console.log(e.message); }
     },
-    update: path => {
-        try { execSync(`svn update ${path}`, { encoding: 'utf-8' }); }
+    update: localPath => {
+        try { execSync(`svn update ${localPath}`, { encoding: 'utf-8' }); }
         catch(e) { console.log(e.message); }
     },
-    add: path =>  {
-        try { execSync(`svn add ${path} --force`, { encoding: 'utf-8' }); }
+    add: localPath =>  {
+        try { execSync(`svn add ${localPath} --force`, { encoding: 'utf-8' }); }
         catch(e) { console.log(e.message); }
     },
-    commit: path => {
-        try { execSync(`svn commit ${path} -q -m "Commit via IleftXMLtoJSONConverter app`, { encoding: 'utf-8' }) }
+    commit: localPath => {
+        try { execSync(`svn commit ${localPath} -q -m "Commit via IleftXMLtoJSONConverter app`, { encoding: 'utf-8' }) }
+        catch(e) { console.log(e.message); }
+    },
+    ls: url => {
+        try { return execSync(`svn list ${url}`, { encoding: 'utf-8' }).toString() }
+        catch(e) { 
+            console.log(e.message);  
+            return null;
+        }
+    },
+    copy: (src, dst) => {
+        try { execSync(`svn copy ${src} ${dst}`, { encoding: 'utf-8' }) }
         catch(e) { console.log(e.message); }
     }
 })

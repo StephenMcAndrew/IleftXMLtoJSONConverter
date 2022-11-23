@@ -44,9 +44,6 @@ function copyBearerTokenText() {
 
   // Copy the text inside the text field
   navigator.clipboard.writeText(copiedText);
-
-  // Alert the user the text has been copied
-  //alert("The bearer token has been copied.");
 }
 
 
