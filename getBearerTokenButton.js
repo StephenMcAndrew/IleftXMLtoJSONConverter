@@ -2,10 +2,6 @@
 *   This file contains all the code related to getting the bearer token needed to send the GraphQL JSON mutation
 *******************************************************************************************************************/
 
-let bearerToken; //The bearer token that will be used for the mutation http request
-let xhr_Auth = new XMLHttpRequest();
-let url_Auth; 
-
 function onGetBearerToken() {
 
   // Get the username and app specific key from the input boxes
@@ -19,7 +15,7 @@ function onGetBearerToken() {
   }
   
   // Construnct the url and send the HTTP request to get the bearer token 
-  url_Auth = "https://testplaneditor-qa.gentex.com/auth/graphql?user_name=" + username + "&app_specific_key=" + app_key;
+  url_Auth = TPE_endpoint + "auth/graphql?user_name=" + username + "&app_specific_key=" + app_key;
   xhr_Auth.open("POST", url_Auth);
   xhr_Auth.send();
 }

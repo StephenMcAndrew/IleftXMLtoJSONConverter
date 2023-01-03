@@ -1,10 +1,6 @@
 /********************************************************************************************************************************
 *   This file contains all the code related to combining all the selected XML files and connverting them into a single JSON file.
 *********************************************************************************************************************************/
-let theTestPlan;
-let testPlanName = "Stephens-Development-TestPlan";
-let svnConfigPath = "http://vcs.gentex.com/svn/testers/deployment/exports/products/iLEFT";
-let projectPath = "";
 
 /*
 * The main function that does the work of reading in the data from the .planxml and ini files and converting it to a json testplan that can be sent to TPE with a GraphQL mutation.
@@ -20,9 +16,11 @@ async function onConvert() {
 
     //Read the .planxml files into stings. The variable xmlStringArray is an array of objects that hold the testplan file name and the xml string.
     const xmlStringArray = await readFilesToStringArray(selectedFiles);
-    //console.log(xmlStringArray);
+    
+    //Read the .ini files into strings. The variable iniStringArray is an array of objects that hold the ini file names and the ini string.
     const iniStringArray = await readFilesToStringArray(selectedINIs);
-    //console.log(iniStringArray);
+   
+    //Parse the ini strings into and array of ini Javascript objects
     const INIs = parseINIsToJSObjArray(iniStringArray);
 
     //Your local path to your project
@@ -40,23 +38,17 @@ async function onConvert() {
     //Parse each string in the xmlStringArray into a XMLDoc object. The vaiable xmlDocArray is an array of objects that hold the testplan file name and the xml ducument.
     const xmlDocArray = await parseXMLStringArrayToXMLDocArray(xmlStringArray);
 
-    //Parse each xml doc into a JavaScript object. 
+    //Parse each xml doc along with the INI key values into a JavaScript object. 
     const testPlanArray = parseXMLDocsAndINsToJSObjArray(xmlDocArray, INIs);
-
-    //console.log(INIs);
-    //console.log(testPlanArray);
   
-    //Get all the test binaries from the xml docs
+    //Get all the test binaries used from the xml docs
     const testBinaries = getTestBinaries(xmlDocArray);
 
     //Get all the methods used in the .planxml test plans. We only want to add measurement callers for the test methods we use from the DCIGen library
     let testPlanMethods = extractTestMethodsFromXMLDocArray(xmlDocArray);
-    //console.log(testPlanMethods);
 
     //Use the GraphQL API to get the DciGen library information of the latest version 
     const dciGenLibrariesInfo = getDciGenLibrariesInfo(testBinaries);
-
-    console.log(dciGenLibrariesInfo);
  
     //Create the TestPlan object
     theTestPlan = new TestPlan();
@@ -85,9 +77,6 @@ async function onConvert() {
     
 
     console.log(TestPlan.JSONstr_To_JSstr(JSON.stringify(theTestPlan.DocObj, null, 2)));
-
-
-    //theTestPlan.addTestMethods()
 }
 
 /*
@@ -206,14 +195,13 @@ Map{
 */
 function getDciGenLibrariesInfo(testBinaries) { 
     const dciGenLibrariesInfo = new Map();
-    const url_TPE =  "https://testplaneditor-qa.gentex.com/graphql";
-
+    
     testBinaries.forEach(testBinary => {
         
         const xhr_TPE = new XMLHttpRequest();
 
         //Open the XHR object to make the json request and set the needed header info
-        xhr_TPE.open("POST", url_TPE, false);
+        xhr_TPE.open("POST", TPE_endpoint + "graphql", false);
         xhr_TPE.setRequestHeader("Authorization","Bearer " + bearerToken);
         xhr_TPE.setRequestHeader("Content-Type", "application/json");
 
@@ -431,6 +419,7 @@ function parseINIsToJSObjArray(iniStringArray){
                         name: "Battery13p8",
                         testMethod: MeasureDcVoltage",
                         description: "Measure Voltage On Battery",
+                        compareDataEval: "0",
                         collectDataEval: "0",
                         exactValEval: "0",
                         highLimit: "14.3",
@@ -541,6 +530,7 @@ function parseXMLDocsAndINsToJSObjArray(xmlDocArray, INIs){
                 subTest.passFailEval = subTest_node.getElementsByTagName("m_passFailEval")[0].childNodes[0].nodeValue;
                 subTest.limitCheckEval = subTest_node.getElementsByTagName("m_limitCheckEval")[0].childNodes[0].nodeValue;
                 subTest.exactValEval = subTest_node.getElementsByTagName("m_exactValEval")[0].childNodes[0].nodeValue;
+                subTest.compareDataEval = subTest_node.getElementsByTagName("m_compareDataEval")[0].childNodes[0].nodeValue;
                 subTest.collectDataEval = subTest_node.getElementsByTagName("m_collectDataEval")[0].childNodes[0].nodeValue;
                 subTest.lowLimit = roundNumString(subTest_node.getElementsByTagName("m_lowLimit")[0].childNodes[0].nodeValue);
                 subTest.value = roundNumString(subTest_node.getElementsByTagName("m_value")[0].childNodes[0].nodeValue);
@@ -649,14 +639,15 @@ String.prototype.firstToLowerCase = function() {
     return this.charAt(0).toLowerCase() + this.slice(1);
 }
 
-function roundNumString(numStr) {
+// Takes a string number and rounds to the provided precision. Also works with "e" sientific notation.
+function roundNumString(numStr, precision = 5) {
     let splitNumStr = numStr.split("e");
     if (splitNumStr.length > 1){
         //Seems like there should be a better way.
-        return parseFloat(parseFloat(splitNumStr[0]).toFixed(5)).toString() + "e" + splitNumStr[1];
+        return parseFloat(parseFloat(splitNumStr[0]).toFixed(precision)).toString() + "e" + splitNumStr[1];
     }
     else {
-        return parseFloat(parseFloat(splitNumStr[0]).toFixed(5)).toString();
+        return parseFloat(parseFloat(splitNumStr[0]).toFixed(precision)).toString();
     }
 }
 

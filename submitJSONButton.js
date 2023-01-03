@@ -1,18 +1,13 @@
 /******************************************************************************************************************
 *   This file contains all the code related to submitting the converted JSON file to the database
 *******************************************************************************************************************/
-
-let fileData;
-const xhr_TPE_Mutation = new XMLHttpRequest();
-const url_TPE =  "https://testplaneditor-qa.gentex.com/graphql";
-
 function onSubmitFile() {
 
    //Force add any new config files and commit to svn
    svn.add(`${projectPath}\\generatedConfig`);
   
   //Open the XHR object to make the json request and set the needed header info
-  xhr_TPE_Mutation.open("POST", url_TPE);
+  xhr_TPE_Mutation.open("POST", TPE_endpoint + "graphql");
   xhr_TPE_Mutation.setRequestHeader("Authorization","Bearer " + bearerToken);
   xhr_TPE_Mutation.setRequestHeader("Content-Type", "application/json");
 

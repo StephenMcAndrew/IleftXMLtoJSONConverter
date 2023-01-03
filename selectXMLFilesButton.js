@@ -1,11 +1,6 @@
 /**********************************************************************************************************
 *   This file contains the code for allowing the user to select the desired .planxml files to be converted
 ***********************************************************************************************************/
-
-let output1 = document.getElementById("output1");
-const fileSelector = document.getElementById('file-selector');
-let selectedFiles = [];
-
 function onFileSelector() {
     
     
@@ -19,7 +14,7 @@ function onFileSelector() {
     document.getElementById('file-selector').click()
 }
     
-fileSelector.addEventListener("change", function() {
+document.getElementById('file-selector').addEventListener("change", function() {
 
     //Put all the selected files into an array
     output1.value = ".planxml files selected to convert:\n"

@@ -3,71 +3,97 @@ class TestPlan {
 
   constructor(testBinary) {
 
+    // The user name from the input field
     this.username = document.getElementById("username").value;
 
+    // The testplan javascript object 
     this.DocObj = JSON.parse(this.templateTPDocStr(this.username))
     
     this.libraryName; //The main test methods library name. i.e., not "ileft.testmethods.instrumentscontrol".
     this.partNumbers; //An array of all the partnumbers
 
-    // Uses this to keep track of which groupID goes with which measurement caller
-    // Map{[key => MeasurementCallerName value => {library: libraryName, groupID: groupID}]}
+    // This is used to keep track of which groupID and bindingCallID goes with which measurement caller
+    // Map{[key => MeasurementCallerName value => {library: libraryName, groupID: groupID, bindingCallID: bindingCallID}]}
     this.measurementCallerMap = new Map();
+
+    // This is used to keep track of the wich IDs go with which groups and evaluations. 
+    // Map{[key => groupName value => {groupID: groupID, subTests: Map{[key => subTestName value => subtestID], ...} }]}
+    this.groupAndEvalMap = new Map();
+
+    this.dataCollectionMethods= ["MyBarCode", "GetExpectedFirmwarePartNumberValue", "GetExpectedFpgaFirmwarePartNumberValue", "GetExpectedOverlayPartNumberValue", "GetExpectedOpsManagerPartNumberValue", 
+    "ImagerRead316Number", "GetExpectedFirmwareSVNRevision", "GetExpectedOverlaySVNRevision", "VerifyIctPartNumber_RD", "VerifyIctPartNumber", "WriteIctPartNumber", "LotNumber", "GetExpectedFirmwareCrcPartNumberValue",
+    "VerifyLaserPartNumber", "GetExpectedTechwellConfigPartNumberValue", "GenericTest"]
   }
 
-  //This method takes a JSON string and converts it to a JavaScript object string. I.g, it removes the "" from the object porperty names.
+  // This method takes a JSON string and converts it to a JavaScript object string. I.g, it removes the "" from the object porperty names.
   static JSONstr_To_JSstr(JSONstr) { return JSONstr.replace(/("[A-Za-z0-9_]+":)/g, (match) => match.replace(/"/g,'')); }
 
-  //Return the the test plan documant as a JavaScript string.
+  // Return the the test plan documant as a JavaScript string.
   getDocObjAsJSstr(pretty = false) { return pretty ?  TestPlan.JSONstr_To_JSstr(JSON.stringify(this.DocObj, null, 2)) : TestPlan.JSONstr_To_JSstr(JSON.stringify(this.DocObj)); }
 
+  /* Add all the measurement caller subroutines needed based on the what is used in the selected .planxml files.
+  *
+  * Param: dciGenLibrariesInfo => A map of the test binary names to the DCIGen info
+  * Param: testPlanMethods => An object that hold the master list of all testMethods used from each test binary
+  */
   addMeasurementCallers(dciGenLibrariesInfo, testPlanMethods) {
 
-    let bundleNumber = 1;
-    const universalPartNumberChildren = [];
-    const masterListOfFuncNames = [];
-
+    let bundleNumber = 1; //Keeps track of the number of bundles used in the testplan so we can name them in the doc object
+    const universalPartNumberChildren = []; //Keeps track of the groupIDs associated with the measurement subroutines so we can add them as children of the UVPN in the doc obj structure
+    const masterListOfFuncNames = []; //Keeps track of all the measurement caller subroutine names used in the doc objec
+    const masterListOfLibraries = []; //Keep track of all the libraries used so we can create the bundle management property
+    //Loop through each DCIGen library used in the testplans
     dciGenLibrariesInfo.forEach((libraryData, libraryName) => {
 
       //Set the testplan's main library name. We'll use this when when creating the init, load, unload, and teardown phases.
+      //I'm assuming a testplan only evey uses instrumentcontrol, iptehandler, and it's main product library
       if(libraryName != "ileft.testmethods.instrumentscontrol" && libraryName != "ileft.platform.iptehandler") {
         this.libraryName = libraryName;
       }
 
       //Add the bundle property to the universal part number
       let bundleName = libraryName + "." + libraryData.versionNumber + "-" + libraryData.platformName;
+      masterListOfLibraries.push(bundleName);
       this.DocObj.elements.universalPartNumber.properties["bundle" + bundleNumber.toString()] = this.generateBaseProperty(bundleName, "string", "");
       bundleNumber++;
 
+      // Don't add any meathods fom the iptehandler library. That's handled when the init, load, unload, and teardown phases are added.
       if(libraryName != "ileft.platform.iptehandler") {
+        //Loop through all the functions in the DCIGen library
         libraryData.functions.forEach(func => {
-
+          //If the function is used in the testplans, we need to add a measurement caller for it
           if (testPlanMethods[libraryName].includes(func.name)) {
+            //Creat the group and binding call ids
             let groupID = this.getGroupID();
             let bindingCallID = this.getBindingCallID();
     
+            //Creat the poperty objects
             let MeasurementCallerProps = {};
             let BindingCallProps = {};
     
-            //We need each measurement caller to a unique name. If the testplan is using more then one test binary library, we get get duplicate name.
+            //We need each measurement caller to have a unique name. If the testplan is using more then one test binary library, we get get duplicate name.
             let functionName = func.name;
             let i = 2;
             while(masterListOfFuncNames.includes(functionName)){
               functionName = functionName + `_${i.toString()}`;
               i++;
             }
-            masterListOfFuncNames.push(functionName);
-            this.measurementCallerMap.set(functionName, {library: libraryName, groupID: groupID, bindingCallID: bindingCallID}); //Keep track of all the measurement caller names and what library they use. We'll need this when we start adding the subtest evaluations.
+            masterListOfFuncNames.push(functionName); //Keep track of all the used function names
+            //Keep track of all the measurement caller names and what library they use. We'll need this when we start adding the subtest evaluations.
+            this.measurementCallerMap.set(functionName, {library: libraryName, groupID: groupID, bindingCallID: bindingCallID}); 
             
             //Generate the measurement caller and binding call properties from the DCIGen params
             func.params.forEach(param => {
+
               let paramType = (param.type == "bool") ? "boolean" : param.type;
               let measDescription = (param.direction == "OUT" || param.direction == "RETURN") ? "[OUTPUT]" : "[INPUT]";
               let bindingDescription = (param.description + " " + measDescription).trim();
-              
+
               let measParamValue;
               let bindingParamValue;
   
+              //Make sure the measurement and binding call value properties are bound correctly based on whether they are an input or output
+              //Make sure the default values are set to the correct type
               if(param.direction == "OUT" || param.direction == "RETURN") {
                 measParamValue = `${groupID}.${param.name}`;
   
@@ -82,16 +108,12 @@ class TestPlan {
                 }
                 else if(param.type == "bool" || param.type == "boolean") {
                   bindingParamValue = false;
-                }
-                
-                
+                }  
               }
               else {
                 bindingParamValue = `${groupID}.${param.name}`;
   
                 if(param.name == "arrayIndex" || param.name == "arrayIndexStr") { 
-                  //measParamValue = "%index%";
-                  //bindingParamValue = `${groupID}.arrayIndex`
                   bindingParamValue = "%index%";
                 }
                 else if(param.type == "int") {
@@ -115,43 +137,58 @@ class TestPlan {
                 if(param.name == "measurementResultParameter" || param.name == "measurementResultOut") {
                   MeasurementCallerProps["measurementResult"] = this.generateBaseProperty(`${bindingCallID}.${param.name}`, "double", measDescription);
                 }
-                //else if(param.name == "arrayIndexStr") {
-                //  MeasurementCallerProps["arrayIndex"] = this.generateBaseProperty(measParamValue, paramType, measDescription);  
-                //}
                 else {
+                  //Create the measurement call subroutine property
                   MeasurementCallerProps[param.name] = this.generateBaseProperty(measParamValue, paramType, measDescription);
                 }
               }
-  
-              //If it's an input parameter we need to bind it to the group measurement caller input by setting the property value. Or if its the array index param, we set it to %index%
-              //let bindingCallParmPropertyValue = "";
-              //if(param.direction == "IN") {
-              //  if(param.name == "arrayIndex" || param.name == "arrayIndexStr") { bindingCallParmPropertyValue = "%index%";}
-              //  else {bindingCallParmPropertyValue = `${groupID}.${param.name}`;}
-              //}
-            
+              //Creat the bindingcall property
               BindingCallProps[param.name] = this.generateBaseProperty(bindingParamValue, paramType, bindingDescription);
             });
     
+            //Create the measurement caller subroutine
             this.DocObj.elements[groupID] = this.generateBaseGroup("group", functionName, "universalPartNumber", "Init", MeasurementCallerProps, true);
             this.DocObj.elements[groupID].retry = this.generateBaseProperty(0, "builtin", "");
             this.DocObj.elements[groupID].loop = this.generateBaseProperty(0, "builtin", "");
   
+            //Create the binding call
             this.DocObj.elements[bindingCallID] = this.generateBaseBindingCall("bindingCall", functionName, groupID, "Init", BindingCallProps, libraryName, func.name, true);
       
+            //Add the measurement subroutine and binding call to the doc object structure
             this.DocObj.structure[groupID] = this.generateBaseStructure("group", [bindingCallID]);
             this.DocObj.structure[bindingCallID] = this.generateBaseStructure("bindingCall", []);
       
+            //Add the measurement call groupID to the list of UPN children
             universalPartNumberChildren.push(groupID);
           }
   
         });
       }
     })
+
+    //Create the bundlemanagement universalPartNumber property
+    let bundleManagementValue = "\"";
+    masterListOfLibraries.forEach(library => {
+      if(library.startsWith("ileft.platform.iptehandler")) {
+        bundleManagementValue += `windows-x32-any AKA ipteHandler { ${library} }; `
+      } else if(library.startsWith("ileft.testmethods.instrumentcontrol")) {
+        bundleManagementValue += `windows-x32-any AKA instruments { ${library} }; `
+      } else {
+        bundleManagementValue += `windows-x32-any AKA productLibrary { ${library} }; `
+      }
+    });
+    bundleManagementValue = bundleManagementValue.trim() + "\"";
+    this.DocObj.elements.universalPartNumber.bundlemanagement = this.generateBaseProperty(bundleManagementValue, "string", "");
   
+    //Add all the measurement call subroutine groupIDs to the list of UPN children
     this.DocObj.structure.universalPartNumber.children = this.DocObj.structure.universalPartNumber.children.concat(universalPartNumberChildren);
   }
 
+  /*
+  *
+  *
+  * 
+  */
   addInitAndLoad(dciGenLibrariesInfo) {
 
     //Get the library data for the main project library
@@ -280,32 +317,29 @@ class TestPlan {
 
     return props;
   }
-  
+
   //This should be called every time a new group is created so we increment the group ID number
-  groupIDNumber = 0;
-  getGroupID() {
-    this.groupIDNumber++;
-    return "group" + this.groupIDNumber.toString();
-  }
+  getGroupID = (() => {
+    let groupIDNumber = 0;
+    return () => {groupIDNumber++; return "group" + groupIDNumber.toString();}
+  })()
 
   //This should be called every time a new binding call is created so we increment the binding call ID number
-  bindingCallIDNumber = 0;
-  getBindingCallID() {
-    this.bindingCallIDNumber++;
-    return "bindingCall" + this.bindingCallIDNumber.toString();
-  }
+  getBindingCallID = (() => {
+    let bindingCallIDNumber = 0;
+    return () => {bindingCallIDNumber++; return "bindingCall" + bindingCallIDNumber.toString();}
 
-  managedPartNumberIDNumber = 0;
-  getManagedPartNumberID() {
-    this.managedPartNumberIDNumber++;
-    return "managedPartNumber" + this.managedPartNumberIDNumber.toString();
-  }
+  })()
 
-  evaluationIDNumber = 0;
-  getEvaluationID() {
-    this.evaluationIDNumber++;
-    return "evaluation" + this.evaluationIDNumber.toString();
-  }
+  getManagedPartNumberID = (() => {
+    let managedPartNumberIDNumber = 0;
+    return () => {managedPartNumberIDNumber++; return "managedPartNumber" + managedPartNumberIDNumber.toString();} 
+  })()
+
+  getEvaluationID = (() => {
+    let evaluationIDNumber = 0;
+    return () => {evaluationIDNumber++; return "evaluation" + evaluationIDNumber.toString();}
+  })()
 
   //Every group/binding call obect will have thes properties
   generateBaseElement(type, description = "", parentIdentifier = "", phase = "Body", properties = {}) {
@@ -341,9 +375,8 @@ class TestPlan {
     managedPartNumber.partNumber = this.generateBaseProperty(partNumber, "string", "");
 
     managedPartNumber.rows = this.generateBaseProperty(1, "builtin", "");
-    //delete managedPartNumber.rows.description;
+    
     managedPartNumber.columns = this.generateBaseProperty(numberOfIndexes, "builtin", "");
-    //delete managedPartNumber.columns.description;
 
     managedPartNumber.arrayType = this.generateBaseProperty("SCRIPTED", "builtin", "");
     managedPartNumber.arrayCode = this.generateBaseProperty(this.generateArrayCode(numberOfIndexes), "builtin", "");
@@ -356,7 +389,7 @@ class TestPlan {
 
     for(let i = 1; i <= numberOfIndexes; i++) {
       let index = i.toString();
-      arrayCode += `{\"row\":${index},\"column\":${index},\"description\":\"Index ${index}\",\"enabled\":true,\"identifier\":${index}},`
+      arrayCode += `{\"row\":1,\"column\":${index},\"description\":\"Index ${index}\",\"enabled\":true,\"identifier\":${index}},`
     }
 
     arrayCode  = arrayCode.slice(0,-1);
@@ -633,10 +666,12 @@ class TestPlan {
       if(testGroupData.associatedPartNumbers.length < this.partNumbers.length) {
         this.DocObj.elements[testGroupData.groupID].assigned = this.generateBaseProperty(testGroupData.associatedPartNumbers.join(", "), "builtin", ""); 
       }
+
+       //Map{[key => groupName value => {groupID: groupID, subTests: Map{[key => subTestName value => subtestID], ...} }]}
+       this.groupAndEvalMap.set(testGroupName, {groupID: testGroupData.groupID, subTests: new Map()})
       
       masterSubTestArray.forEach(subTest => {
-        const evaluationID = this.getEvaluationID();
-  
+
         //We have to be smart about how find the groupID of the measurement caller we want to use with this evaluation
         let measurementCaller = `${subTest.testMethod}`;
         let i = 2;
@@ -650,11 +685,42 @@ class TestPlan {
         //The DCIGen WriteAquiredWaveformToFile_OnFailure method takes a bool as the testFailed param instead of a string like in the old testmethod. 
         //We need to parse the old string param and use that to generate a script that will output a true or false value 
         if(subTest.testMethod == "WriteAquiredWaveformToFile_OnFailure") {
+          const scriptEvalID = this.getEvaluationID();
+          let waveformScript = this.generateWaveformSaveScript(subTest.testArgs.get("testFailed"), scriptEvalID);
+          let evalName = `WaveformScript_${subTest.testArgs.get("waveformID")}`;
+
+          let scriptEval = this.generateBaseGroup("evaluation", evalName, testGroupData.groupID, "Body", {}, false);
+          scriptEval.evaluationType = this.generateBaseProperty("SCRIPTED", "builtin", "");
+          scriptEval.lowLimit = this.generateBaseProperty("0", "builtin", "");
+          scriptEval.highLimit = this.generateBaseProperty("0", "builtin", "");
+          scriptEval.value = this.generateBaseProperty("0", "builtin", "");
+          scriptEval.runtimeResume = this.generateBaseProperty(true, "builtin", "");
+          scriptEval.updateTestMetrics = this.generateBaseProperty(false, "builtin", "");
+          scriptEval.onEvaluate = this.generateBaseProperty(waveformScript, "slot", "");
+          scriptEval.properties = {checkIfFailed: this.generateBaseProperty("", "string", "[OUTPUT]")};
+
+          this.DocObj.elements[scriptEvalID] = scriptEval;
+          this.DocObj.structure[scriptEvalID] = this.generateBaseStructure("evaluation", []);
   
+          this.DocObj.structure[testGroupData.groupID].children.push(scriptEvalID);
+
+          this.groupAndEvalMap.get(testGroupName).subTests.set(evalName, scriptEvalID);
         }
-        
+
+        const evaluationID = this.getEvaluationID();
+
+        //If the subtest is a campare value type or is a data collect method that returns a true string, we have to convert the existing measurement call subroutine into a regular subroutine.
+        //Compare value type tests are always on strings
+        if(subTest.compareDataEval == "1" || this.dataCollectionMethods.includes(subTest.name) ){
+          let measurementResult_Copy = structuredClone(this.DocObj.elements[measurementCallerID].properties.measurementResult);
+          delete this.DocObj.elements[measurementCallerID].properties.measurementResult;
+          this.DocObj.elements[measurementCallerID].properties.dataOutput = measurementResult_Copy;
+          this.DocObj.elements[measurementCallerID].properties.dataOutput.type = "string";
+        }
+
         //create the evaluation parameters
         let evaluationProps = {};
+        let targetOutput;
         for (var property in this.DocObj.elements[measurementCallerID].properties) {
           
           if( this.DocObj.elements[measurementCallerID].properties.hasOwnProperty(property)) {
@@ -671,21 +737,22 @@ class TestPlan {
             //else if (property == "arrayIndexStr" || property == "arrayIndex") {
             //  propertyValue = "%index%";
             //}
-            else if (property == "measurementResult") {
-              propertyValue = 0.0;
+            else if (property == "measurementResult" || property == "dataOutput") {
+              propertyValue = structuredClone(this.DocObj.elements[measurementCallerID].properties[property].value);
+              targetOutput = property;
             }
             else if (!subTest.testArgs.has(property)) {
               propertyValue = '';
             }
             else {
-              propertyValue = subTest.testArgs.get(property);;
+              propertyValue = subTest.testArgs.get(property);
             }
             evaluationProps[property].value = propertyValue;
             
           }
         }
       
-        let evaluation = this.generateBaseEvaluation(subTest, testGroupName, testGroupData.groupID, measurementCallerID, `${measurementCallerID}.measurementResult`, evaluationProps);
+        let evaluation = this.generateBaseEvaluation(subTest, testGroupName, testGroupData.groupID, measurementCallerID, `${measurementCallerID}.${targetOutput}`, evaluationProps);
         
         if(subTest.associatedPartNumbers.length < this.partNumbers.length) {
           evaluation.assigned = this.generateBaseProperty(subTest.associatedPartNumbers.join(", "), "builtin", "");
@@ -695,10 +762,22 @@ class TestPlan {
         this.DocObj.structure[evaluationID] = this.generateBaseStructure("evaluation", []);
   
         this.DocObj.structure[testGroupData.groupID].children.push(evaluationID);
+
+        this.groupAndEvalMap.get(testGroupName).subTests.set(subTest.name, evaluationID);
   
       })
     })
-  }  
+  }
+  
+  generateWaveformSaveScript(checkIfFailedStr, evaluationID) {
+    let waveformSript = `${evaluationID}.checkIfFailed = !(`;
+    checkIfFailedStr.split("|").forEach(testToCheck => {
+      const testToCheckArray = testToCheck.split("::");
+      let evalIDToCheck = this.groupAndEvalMap.get(testToCheckArray[0]).subTests.get(testToCheckArray[1]);
+      waveformSript += `${evalIDToCheck}.runtime.passed || `;
+    })
+    return waveformSript.slice(0,-4) + ");";
+  }
   
   combineSubTests(arrayOfSubTests) {
     const masterSubTestMap = new Map();
@@ -812,8 +891,11 @@ class TestPlan {
     else if(subTestObj.passFailEval == "1") {testType = "PASSFAIL";}
     else if(subTestObj.exactValEval == "1") {testType = "EXACT"}
     else if(subTestObj.collectDataEval == "1") {testType = "COLLECTION"}
+    else if(subTestObj.compareDataEval == "1") {testType = "STRING"}
     
-    let evaluation = this.generateBaseGroup("evaluation", `${testGroupName}_${subTestObj.name}`, parentIdentifier, "Body", {}, subTestObj.skipTest == "0" ? false : true);
+    //If you want the subtest names to be prefixed with the testgroup names, use the line below
+    //let evaluation = this.generateBaseGroup("evaluation", `${testGroupName}_${subTestObj.name}`, parentIdentifier, "Body", {}, subTestObj.skipTest == "0" ? false : true);
+    let evaluation = this.generateBaseGroup("evaluation", `${subTestObj.name}`, parentIdentifier, "Body", {}, subTestObj.skipTest == "0" ? false : true);
     evaluation.comment = this.generateBaseProperty(subTestObj.description, "builtin", "");
     evaluation.loop = this.generateBaseProperty(parseInt(subTestObj.loopCount), "builtin", "");
     evaluation.retry = this.generateBaseProperty(parseInt(subTestObj.retryCount), "builtin", "");
@@ -821,9 +903,6 @@ class TestPlan {
     evaluation.interstitialRetryDelay = this.generateBaseProperty(parseInt(subTestObj.retryDelayMillis), "builtin", "");
     evaluation.preExecuteDelay = this.generateBaseProperty(parseInt(subTestObj.preDelayMillis), "builtin", "");
     evaluation.postExecuteDelay = this.generateBaseProperty(parseInt(subTestObj.postDelayMillis), "builtin", "");
-    
-    
-    
     
     evaluation.value = this.generateBaseProperty(subTestObj.value, "builtin", "");
     evaluation.highLimit = this.generateBaseProperty(subTestObj.highLimit, "builtin", "");

@@ -1,6 +1,3 @@
-const iniSelector = document.getElementById('ini-selector');
-let selectedINIs = [];
-
 function onINISelector() {
     
     //Alert the user if they have not gotten a bearer token yet
@@ -13,7 +10,7 @@ function onINISelector() {
     document.getElementById('ini-selector').click()
 }
     
-iniSelector.addEventListener("change", function() {
+document.getElementById('ini-selector').addEventListener("change", function() {
 
     //Put all the selected files into an array
     output1.value += "INIs selected to convert:\n"
