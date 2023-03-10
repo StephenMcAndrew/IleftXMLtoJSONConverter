@@ -26,7 +26,7 @@ async function onConvert() {
     //Your local path to your project
     projectPath = xmlStringArray[0].path.substring(0, xmlStringArray[0].path.lastIndexOf("\\"));
 
-    //Create the testplan export forlder. If it already exists, the mkdir command throws and error and does nothing
+    //Create the testplan export forlder in svn. If it already exists, the mkdir command throws and error and does nothing
     svn.mkdir(svnConfigPath + "/" + testPlanName);
     //Remove the old local folder
     fs.rmSync(projectPath + "\\generatedConfig");
@@ -40,7 +40,7 @@ async function onConvert() {
 
     //Parse each xml doc along with the INI key values into a JavaScript object. 
     const testPlanArray = parseXMLDocsAndINsToJSObjArray(xmlDocArray, INIs);
-  
+
     //Get all the test binaries used from the xml docs
     const testBinaries = getTestBinaries(xmlDocArray);
 
@@ -49,7 +49,7 @@ async function onConvert() {
 
     //Use the GraphQL API to get the DciGen library information of the latest version 
     const dciGenLibrariesInfo = getDciGenLibrariesInfo(testBinaries);
- 
+
     //Create the TestPlan object
     theTestPlan = new TestPlan();
 
@@ -62,15 +62,18 @@ async function onConvert() {
     //Add all the part numbers from the INIs to the converted testplan
     theTestPlan.addPartNumbers(INIs);
 
+    //Generate the config element. Add all the configuration key value pairs from the ini's. Generate the json globals file.
+    theTestPlan.addConfiguration(INIs, testPlanArray);
+
     //Add all the test groups along with all the subtests
     theTestPlan.addTestGroups(testPlanArray);
+
+    theTestPlan.addLimitsAndGlobals();
 
     //Generate the Unload and Teardown phases
     theTestPlan.addUnloadAndTeardown(dciGenLibrariesInfo);
     
-    //Generate the config element. Add all the configuration key value pairs. Generate the json globals file.
-    theTestPlan.addConfiguration(INIs, testPlanArray);
-
+    
     //console.log(dciGenLibrariesInfo);
 
     console.log(theTestPlan.DocObj);
@@ -148,6 +151,7 @@ function getTestBinaries(xmlDocArray)
 
     //We also need the IPTE library
     masterTestBinaryArray.push("ileft.platform.iptehandler");
+    masterTestBinaryArray.push("gtm.utilities.subversionclient");
 
     return masterTestBinaryArray;
 }
@@ -294,6 +298,7 @@ function parseINIsToJSObjArray(iniStringArray){
     iniStringArray.forEach(ini => {
         let iniObj = {};
         iniObj.fileName = ini.name;
+        let commSectionCount = 1; //Keep track of the commsections that are not either the main comm settings or the barcode scanner setting
 
         //Put each line of the ini into and array
         const iniLines = (ini.str.split(/\r?\n/)).map(line =>{
@@ -320,6 +325,9 @@ function parseINIsToJSObjArray(iniStringArray){
                 partNumber.seven_o_five = line.split("=")[1].trim() + "-001";
                 
                 paramsMap = new Map();//The will hold our key value pairs
+
+                // We use this for the retest count
+                paramsMap.set("pARTNUMBER", line.split("=")[1].trim());
 
                 //Get the next line
                 lineIndex++;
@@ -348,6 +356,19 @@ function parseINIsToJSObjArray(iniStringArray){
                     lineIndex++;
                     line = iniLines[lineIndex];
                 }
+
+                // We change the LockEC param to eclReleaseStatus
+                if (paramsMap.has("LockEC") || paramsMap.has("lockEC")) {
+                    paramsMap.set("ecoReleaseStatus", paramsMap.get("lockEC") == "true" ? "false" : "true");
+                    paramsMap.delete("lockEC");
+                } 
+                else {
+                    paramsMap.set("ecoReleaseStatus", "true" );
+                }
+
+                //We always need to have this
+                paramsMap.set("enableOpsManager", "true");
+
                 partNumber.params = paramsMap;
                 partNumbersArray.push(partNumber);
             }
@@ -355,7 +376,12 @@ function parseINIsToJSObjArray(iniStringArray){
             //We're at a section 
             if (regexSection.test(line)) {
                 let section = {};
+
                 section.name = line.replace(/\[/g, "").replace(/\]/g, "").trim();
+
+                if(section.name != "Communications" && section.name != "Communications1") {
+                    commSectionCount++;
+                }
 
                 paramsMap = new Map(); //This will hold our key value pairs
 
@@ -372,16 +398,40 @@ function parseINIsToJSObjArray(iniStringArray){
                         continue 
                     }
 
-                    // Sometimes we hava a parameter key but no value on the other side
-                    if(line.split("=")[1].trim() == null){
-                        paramsMap.set((line.split("=")[0].trim()).firstToLowerCase(), "");
-                        lineIndex++;
-                        line = iniLines[lineIndex];
-                        continue 
+                    //We need to change some of the paramter names to work with the new DCIGen library
+                    //I'm going to make some assumptions. The first comm section is always the main one. The second is always the scanner.
+                    let key = (line.split("=")[0].trim()).firstToLowerCase();
+                    let value = line.split("=")[1].trim() != null ? line.split("=")[1].trim() : "";
+
+                    if(section.name == "Communications") {
+                        if( key == "hardware") {
+                            paramsMap.set("opsManProtocol", value);
+                        }
+                        else {
+                            paramsMap.set("opsManProtocal_" + key, value);
+                        } 
+                    }
+                    else if(section.name == "Communications1") {
+                        if( key == "hardware") {
+                            paramsMap.set("keyenceScannerProtocol", value);
+                        }
+                        else if( key == "port") {
+                            paramsMap.set("keyenceScannerPort", value);
+                        }
+                        else if( key == "lasedBarcodePrefix") {
+                            paramsMap.set("barcodePrefix", value);
+                        }
+                        else if( key == "expectedBarCodeSize") {
+                            paramsMap.set("barcodeSize", value);
+                        }
+                        else {
+                            paramsMap.set("keyenceScannerProtocol_" + key, value);
+                        }
+                    }
+                    else {
+                        paramMap.set("comm" + commSectionCount.toString() + key, value);
                     }
 
-                    //Put the key value parameter pair in the map
-                    paramsMap.set((line.split("=")[0].trim()).firstToLowerCase(), line.split("=")[1].trim());
                     lineIndex++;
                     line = iniLines[lineIndex];
                 }
@@ -405,19 +455,19 @@ function parseINIsToJSObjArray(iniStringArray){
 [
     {
         fileName: "700-0766.planxml",
-        partNumbers: [700-5200, ...],
+        partNumbers: [700-5200-001, ...],
         testBinaries: ["testBinary1", ...],
-        config_file: Instruments_3up_Reverse.cfg,
-        nodeMap_file: NodeMap700-0766.cfg,
-        gPdig_file: GP700-0766.cfg,
+        testerConfigFile: Instruments_3up_Reverse.cfg,
+        nodeMapFile: NodeMap700-0766.cfg,
+        gpDigFile: GP700-0766.cfg,
         testGroups: [
             {
                 name: "UUT_Pwr",
-                associatedPartNumbers: [700-5200, ...],
+                associatedPartNumbers: [700-5200-001, ...],
                 subTests: [
                     {
                         name: "Battery13p8",
-                        testMethod: MeasureDcVoltage",
+                        testMethod: "MeasureDcVoltage",
                         description: "Measure Voltage On Battery",
                         compareDataEval: "0",
                         collectDataEval: "0",
@@ -434,7 +484,7 @@ function parseINIsToJSObjArray(iniStringArray){
                         retryDelayMillis "0",
                         skipTest: "0",
                         testBinary: ileft.testmethods.t750bfdmcommtests",
-                        associatedPartNumbers: [700-5200, ...],
+                        associatedPartNumbers: [700-5200-001, ...],
                         testArgs: Map{
                             [
                                 key: "minusNode"
@@ -481,13 +531,13 @@ function parseXMLDocsAndINsToJSObjArray(xmlDocArray, INIs){
         while(configFile_Node) {
             const key_value = configFile_Node.childNodes[0].nodeValue.split("=");
             if(key_value[0] == "config_file") {
-                testPlan.config_file = key_value[1];
+                testPlan.testerConfigFile = key_value[1];
             }
             else if(key_value[0] == "NodeMap_file") {
-                testPlan.nodeMap_file = key_value[1];
+                testPlan.nodeMapFile = key_value[1];
             }
             else if(key_value[0] == "GPdig_file") {
-                testPlan.gPdig_file = key_value[1];
+                testPlan.gpDigFile = key_value[1];
             }
             configFile_Node = configFile_Nodes.iterateNext();
         }

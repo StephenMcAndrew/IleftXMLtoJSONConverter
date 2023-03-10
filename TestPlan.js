@@ -11,16 +11,39 @@ class TestPlan {
     
     this.libraryName; //The main test methods library name. i.e., not "ileft.testmethods.instrumentscontrol".
     this.partNumbers; //An array of all the partnumbers
+    this.ecoNumsMaster = new Set(); //A list of all the ECO numbers
 
     // This is used to keep track of which groupID and bindingCallID goes with which measurement caller
     // Map{[key => MeasurementCallerName value => {library: libraryName, groupID: groupID, bindingCallID: bindingCallID}]}
     this.measurementCallerMap = new Map();
 
-    // This is used to keep track of the wich IDs go with which groups and evaluations. 
-    // Map{[key => groupName value => {groupID: groupID, subTests: Map{[key => subTestName value => subtestID], ...} }]}
-    this.groupAndEvalMap = new Map();
+    /* Used to keep track of the wich IDs go with which groups and evaluations. Also keeps tack of each evaluations limits. 
+    // If the evaluation is a LIMITCHECK, the boundLimitsMap tells us with limits go with which partnumbers
+    {
+      groupName: {
+        groupID: groupID,
+        subTests: map{ 
+			    [
+				    key => subTestName
+				    value => {
+					    subTestID: SubTestID,
+					    lowLimit: lowLimit,
+					    value: value,
+					    highLimit: highLimit,
+					    type: "LIMITCHECK",
+				    	boundLimitsMap: Map{[key => partNumber value => {lowLimit: lowLimit, highLimit: highLimit, value: value}]}
+				    }
+			    ],
+			    ...
+		    }
+      },
+      ...
+    }
+    */
+    this.groupAndEvalMap = {};
 
-    this.dataCollectionMethods= ["MyBarCode", "GetExpectedFirmwarePartNumberValue", "GetExpectedFpgaFirmwarePartNumberValue", "GetExpectedOverlayPartNumberValue", "GetExpectedOpsManagerPartNumberValue", 
+    // We treat data collection methods and evaluations differetly. They are generated at regular methods/evaluations rather then measurement type methods/evaluations. This is a list of all the data collect methods iLeft uses 
+    this.dataCollectionMethods = ["MyBarCode", "GetExpectedFirmwarePartNumberValue", "GetExpectedFpgaFirmwarePartNumberValue", "GetExpectedOverlayPartNumberValue", "GetExpectedOpsManagerPartNumberValue", 
     "ImagerRead316Number", "GetExpectedFirmwareSVNRevision", "GetExpectedOverlaySVNRevision", "VerifyIctPartNumber_RD", "VerifyIctPartNumber", "WriteIctPartNumber", "LotNumber", "GetExpectedFirmwareCrcPartNumberValue",
     "VerifyLaserPartNumber", "GetExpectedTechwellConfigPartNumberValue", "GenericTest"]
   }
@@ -47,7 +70,7 @@ class TestPlan {
 
       //Set the testplan's main library name. We'll use this when when creating the init, load, unload, and teardown phases.
       //I'm assuming a testplan only evey uses instrumentcontrol, iptehandler, and it's main product library
-      if(libraryName != "ileft.testmethods.instrumentscontrol" && libraryName != "ileft.platform.iptehandler") {
+      if(libraryName != "ileft.testmethods.instrumentscontrol" && libraryName != "ileft.platform.iptehandler" && libraryName != "gtm.utilities.subversionclient") {
         this.libraryName = libraryName;
       }
 
@@ -57,8 +80,8 @@ class TestPlan {
       this.DocObj.elements.universalPartNumber.properties["bundle" + bundleNumber.toString()] = this.generateBaseProperty(bundleName, "string", "");
       bundleNumber++;
 
-      // Don't add any meathods fom the iptehandler library. That's handled when the init, load, unload, and teardown phases are added.
-      if(libraryName != "ileft.platform.iptehandler") {
+      // Don't add any meathods fom the iptehandler or the subversionclient library. That's handled when the init, load, unload, and teardown phases are added.
+      if(libraryName != "ileft.platform.iptehandler" && libraryName != "gtm.utilities.subversionclient") {
         //Loop through all the functions in the DCIGen library
         libraryData.functions.forEach(func => {
           //If the function is used in the testplans, we need to add a measurement caller for it
@@ -134,8 +157,8 @@ class TestPlan {
               if ((param.name != "arrayIndex") && (param.name != "arrayIndexStr") && (param.name != "deferredResults") && (param.name != "formattedResults") && (param.name != "success") && (param.name != "result"))
               {
                 //Rename the measurementResult param from the binding call to just measurementResult if needed
-                if(param.name == "measurementResultParameter" || param.name == "measurementResultOut") {
-                  MeasurementCallerProps["measurementResult"] = this.generateBaseProperty(`${bindingCallID}.${param.name}`, "double", measDescription);
+                if(param.name == "measurementResultParameter" || param.name == "measurementResultOut" || param.name == "measurementResult") {
+                  MeasurementCallerProps["measurementResult"] = this.generateBaseProperty(`${bindingCallID}.${param.name}`, "string", measDescription);
                 }
                 else {
                   //Create the measurement call subroutine property
@@ -171,14 +194,19 @@ class TestPlan {
     masterListOfLibraries.forEach(library => {
       if(library.startsWith("ileft.platform.iptehandler")) {
         bundleManagementValue += `windows-x32-any AKA ipteHandler { ${library} }; `
-      } else if(library.startsWith("ileft.testmethods.instrumentcontrol")) {
+      } 
+      else if(library.startsWith("ileft.testmethods.instrumentcontrol")) {
         bundleManagementValue += `windows-x32-any AKA instruments { ${library} }; `
-      } else {
+      } 
+      else if(library.startsWith("gtm.utilities.subversionclient")) {
+        bundleManagementValue += `windows-x32-vc10 AKA svnClient { ${library} }; `
+      }
+      else {
         bundleManagementValue += `windows-x32-any AKA productLibrary { ${library} }; `
       }
     });
     bundleManagementValue = bundleManagementValue.trim() + "\"";
-    this.DocObj.elements.universalPartNumber.bundlemanagement = this.generateBaseProperty(bundleManagementValue, "string", "");
+    this.DocObj.elements.universalPartNumber.bundlemanagement = this.generateBaseProperty(bundleManagementValue, "builtin", "");
   
     //Add all the measurement call subroutine groupIDs to the list of UPN children
     this.DocObj.structure.universalPartNumber.children = this.DocObj.structure.universalPartNumber.children.concat(universalPartNumberChildren);
@@ -194,9 +222,12 @@ class TestPlan {
     //Get the library data for the main project library
     let projectLibraryData = dciGenLibrariesInfo.get(this.libraryName);
     let ipteLibraryData = dciGenLibrariesInfo.get("ileft.platform.iptehandler");
+    let subversionclientLibraryData = dciGenLibrariesInfo.get("gtm.utilities.subversionclient");
 
     //Generate all the IDs for the init phase
     let initGroupID = this.getGroupID();
+    //let removeDirID = this.getBindingCallID();
+    let svnExportID = this.getBindingCallID();
     let setupID = this.getBindingCallID();
     let initializeID = this.getBindingCallID();
     let startMessageID = this.getBindingCallID();
@@ -209,8 +240,15 @@ class TestPlan {
 
     //Setup the init group
     this.DocObj.elements[initGroupID] = this.generateBaseGroup("group", "Init", "universalPartNumber", "Init", {}, false);
-    this.DocObj.structure[initGroupID] = this.generateBaseStructure("group", [setupID, initializeID, startMessageID]);
+    this.DocObj.structure[initGroupID] = this.generateBaseStructure("group", [/*removeDirID,*/ svnExportID, setupID, initializeID, startMessageID]);
     this.DocObj.structure.universalPartNumber.children.push(initGroupID);
+
+    //Create the binding calls to remove the old config folder and then copy over the new ones.
+    //this.DocObj.elements[removeDirID] = this.generateBaseBindingCall("bindingCall", "RemoveDir", initGroupID, "Init", this.genPhaseBCProps(projectLibraryData.functions.get("RemoveDir").params), this.libraryName, "RemoveDir", false);
+    //this.DocObj.structure[removeDirID] = this.generateBaseStructure("bindingCall", []);
+    console.log(svnExportID);
+    this.DocObj.elements[svnExportID] = this.generateBaseBindingCall("bindingCall", "DefaultStationExport", initGroupID, "Init", this.genPhaseBCProps(subversionclientLibraryData.functions.get("DefaultStationExport").params), "gtm.utilities.subversionclient", "DefaultStationExport", false);
+    this.DocObj.structure[svnExportID] = this.generateBaseStructure("bindingCall", []);
 
     //Create the Setup binding call
     this.DocObj.elements[setupID] = this.generateBaseBindingCall("bindingCall", "Setup", initGroupID, "Init", this.genPhaseBCProps(projectLibraryData.functions.get("Setup").params), this.libraryName, "Setup", false);
@@ -224,7 +262,7 @@ class TestPlan {
     this.DocObj.structure[initializeID] = this.generateBaseStructure("bindingCall", []);
 
     //Create the Send Start Message binding call
-    this.DocObj.elements[startMessageID] = this.generateBaseBindingCall("bindingCall", "SendStartMessage", initGroupID, "Init", this.genPhaseBCProps(ipteLibraryData.functions.get("SendStartMessage").params), this.libraryName, "SendStartMessage", false);
+    this.DocObj.elements[startMessageID] = this.generateBaseBindingCall("bindingCall", "SendStartMessage", initGroupID, "Init", this.genPhaseBCProps(ipteLibraryData.functions.get("SendStartMessage").params), "ileft.platform.iptehandler", "SendStartMessage", false);
     this.DocObj.structure[startMessageID] = this.generateBaseStructure("bindingCall", []);
 
     //------------------------------------------------------------------------
@@ -305,14 +343,22 @@ class TestPlan {
     this.DocObj.structure[endMessageID] = this.generateBaseStructure("bindingCall", []);
   }
 
-  genPhaseBCProps(params) {
+  genPhaseBCProps(params, nonDefaultParams = null) {
     let props = {};
     params.forEach(param => {
       let paramType = (param.type == "bool") ? "boolean" : param.type;
       let measDescription = (param.direction == "OUT" || param.direction == "RETURN") ? "[OUTPUT]" : "[INPUT]";
       let bindingDescription = (param.description + " " + measDescription).trim();
 
-      props[param.name] = this.generateBaseProperty(param.default, paramType, bindingDescription );
+      let paramValue;
+      if(nonDefaultParams != null){
+        paramValue = nonDefaultParams.get(param);
+      }
+      else {
+        paramValue =param.default;
+      }
+
+      props[param.name] = this.generateBaseProperty(paramValue, paramType, bindingDescription );
     })
 
     return props;
@@ -439,56 +485,65 @@ class TestPlan {
     this.partNumbers = masterListOfPartNumbers;
   }
 
-  addConfiguration(INIs, testPlanArray){
+  addConfiguration(INIs, testPlanArray) {
     let configProps = {};
     const masterConfigArray = [];
-      INIs.forEach(ini => {
-        ini.partNumbers.forEach(partNumber => {
-          partNumber.params.forEach((value, key) => {
-            if(!masterConfigArray.includes(key) && key != "description") {
-              masterConfigArray.push(key);
-              configProps[key] = this.generateBaseProperty("", "string", "");
-            }
-          })
+
+    INIs.forEach(ini => {
+      ini.partNumbers.forEach(partNumber => {
+        partNumber.params.forEach((value, key) => {
+          if(!masterConfigArray.includes(key) && key != "description") {
+            masterConfigArray.push(key);
+            configProps[key] = this.generateBaseProperty("", "string", "");
+          }
         })
       })
-  
-      configProps.config_file = this.generateBaseProperty("", "string", "");
-      configProps.nodeMap_file = this.generateBaseProperty("", "string", "");
-      configProps.gPdig_file = this.generateBaseProperty("", "string", "");
+      ini.sections.forEach(commSection => {
+        commSection.params.forEach((value, key) => {
+          if(!masterConfigArray.includes(key) && key != "description") {
+            masterConfigArray.push(key);
+            configProps[key] = this.generateBaseProperty("", "string", "");
+          }
+        })
+      })
+    })
+
+    configProps.testerConfigFile = this.generateBaseProperty("", "string", "");
+    configProps.nodeMapFile = this.generateBaseProperty("", "string", "");
+    configProps.gpDigFile = this.generateBaseProperty("", "string", "");
+    configProps.keyenceCommandsetFileName = this.generateBaseProperty("", "string", "");
       
-      //Make sure we have a fixture id config. We'll have to manually add these if the inis don't have it.
-      if(!configProps.hasOwnProperty("fixtureId")) {
-        configProps["fixtureId"] = this.generateBaseProperty("", "string", "");;
-      }
+    //Make sure we have a fixture id config. We'll have to manually add these if the inis don't have it.
+    if(!configProps.hasOwnProperty("fixtureId")) {
+      configProps["fixtureId"] = this.generateBaseProperty("", "string", "");;
+    }
   
-      //We want to add a "configuration" property to the testplan doc but not the globals doc
-      configProps.configuration = this.generateBaseProperty(true, "boolean", "");
+    //We want to add a "configuration" property to the testplan doc but not the globals/locals doc
+    configProps.configuration = this.generateBaseProperty(true, "boolean", "");
   
-      this.DocObj.elements.configuration = this.generateBaseElement("configuration", "Configuration", "universalPartNumber", "Init", configProps);
-      this.DocObj.structure.universalPartNumber.children.unshift("configuration");
-      this.DocObj.structure.configuration = this.generateBaseStructure("configuration", ["configScript"])
+    this.DocObj.elements.configuration = this.generateBaseElement("configuration", "Configuration", "universalPartNumber", "Init", configProps);
+    this.DocObj.structure.universalPartNumber.children.unshift("configuration");
+    this.DocObj.structure.configuration = this.generateBaseStructure("configuration", ["configScript"])
   
-      this.DocObj.elements.configScript = this.generateBaseElement("evaluation", "configScript", "configuration", "Init", {});
-      this.DocObj.elements.configScript.loop = this.generateBaseProperty(0,"builtin", "");
-      this.DocObj.elements.configScript.retry = this.generateBaseProperty(0,"builtin", "");
-      this.DocObj.elements.configScript.skipped = this.generateBaseProperty(false,"builtin", "");
-      this.DocObj.elements.configScript.updateTestMetrics = this.generateBaseProperty(false,"builtin", "");
-      this.DocObj.elements.configScript.runtimeResume = this.generateBaseProperty(false,"builtin", "");
-      this.DocObj.elements.configScript.value = this.generateBaseProperty("0","builtin", "");
-      this.DocObj.elements.configScript.highLimit = this.generateBaseProperty("0.0000e0","builtin", "");
-      this.DocObj.elements.configScript.lowLimit = this.generateBaseProperty("0.0000e0","builtin", "");
-      this.DocObj.elements.configScript.evaluationType = this.generateBaseProperty("SCRIPTED","builtin", "");
-      this.DocObj.elements.configScript.onEvaluate = this.generateBaseProperty("Tue Sep 27 08:21:11 2022","slot", "");
-      this.DocObj.structure.configScript = this.generateBaseStructure("evaluation", []);
+    this.DocObj.elements.configScript = this.generateBaseElement("evaluation", "configScript", "configuration", "Init", {});
+    this.DocObj.elements.configScript.loop = this.generateBaseProperty(0,"builtin", "");
+    this.DocObj.elements.configScript.retry = this.generateBaseProperty(0,"builtin", "");
+    this.DocObj.elements.configScript.skipped = this.generateBaseProperty(false,"builtin", "");
+    this.DocObj.elements.configScript.updateTestMetrics = this.generateBaseProperty(false,"builtin", "");
+    this.DocObj.elements.configScript.runtimeResume = this.generateBaseProperty(false,"builtin", "");
+    this.DocObj.elements.configScript.value = this.generateBaseProperty("0","builtin", "");
+    this.DocObj.elements.configScript.highLimit = this.generateBaseProperty("0.0000e0","builtin", "");
+    this.DocObj.elements.configScript.lowLimit = this.generateBaseProperty("0.0000e0","builtin", "");
+    this.DocObj.elements.configScript.evaluationType = this.generateBaseProperty("SCRIPTED","builtin", "");
+    this.DocObj.elements.configScript.onEvaluate = this.generateBaseProperty("Tue Sep 27 08:21:11 2022","slot", "");
+    this.DocObj.structure.configScript = this.generateBaseStructure("evaluation", []);
   
-      this.generateGlobalFiles(configProps, INIs, testPlanArray);
+    this.generateConfigFiles(configProps, INIs, testPlanArray);
   }
 
-  generateGlobalFiles(configProps, INIs, testPlanArray) {
-    let globalsMaster = {};
-    const ecoNumsMaster = new Set();
-  
+  generateConfigFiles(configProps, INIs, testPlanArray) {
+    let localsMaster = {};
+
     //Generate the defaults 
     let defaults = {};
     for(var key in configProps) {
@@ -497,13 +552,10 @@ class TestPlan {
       }
     }
   
-    //Add the defaults to the globalsMaster
+    //Add the defaults to the localsMaster
     this.partNumbers.forEach(partNum => {
-      globalsMaster[partNum] = {};
-      globalsMaster[partNum].Defaults = structuredClone(defaults);
-      globalsMaster[partNum].Defaults.config_file = "";
-      globalsMaster[partNum].Defaults.nodeMap_file = "";
-      globalsMaster[partNum].Defaults.gPdig_file = "";
+      localsMaster[partNum] = {};
+      localsMaster[partNum].Defaults = structuredClone(defaults);
     });
   
     INIs.forEach(ini => {     
@@ -511,11 +563,11 @@ class TestPlan {
   
         let partNum = partNumberSection.seven_o_five;
         let ecoNum = partNumberSection.params.get("eCNum");
-        ecoNumsMaster.add(ecoNum);
+        this.ecoNumsMaster.add(ecoNum);
         let ecoObj = structuredClone(defaults);
   
         partNumberSection.params.forEach((value, key) =>{
-          ecoObj[key] = value;
+          if(key != "description") { ecoObj[key] = value; }
         })
   
         ini.sections.forEach(commSection =>{
@@ -524,39 +576,52 @@ class TestPlan {
           })
         })
   
-        globalsMaster[partNum][ecoNum] = structuredClone(ecoObj);
+        localsMaster[partNum][ecoNum] = structuredClone(ecoObj);
       })
     })
 
     //Add the config file key values from the testplan 
       testPlanArray.forEach(testPlan => {
         testPlan.partNumbers.forEach(partNumber => {
-          for(let eco in globalsMaster[partNumber]) {
+          for(let eco in localsMaster[partNumber]) {
             if( eco != "Defaults") {
-              globalsMaster[partNumber][eco].config_file = testPlan.config_file;
-              globalsMaster[partNumber][eco].nodeMap_file = testPlan.nodeMap_file;
-              globalsMaster[partNumber][eco].gPdig_file = testPlan.gPdig_file;
+              localsMaster[partNumber][eco].testerConfigFile = testPlan.testerConfigFile;
+              localsMaster[partNumber][eco].nodeMapFile = testPlan.nodeMapFile;
+              localsMaster[partNumber][eco].gpDigFile = testPlan.gpDigFile;
+              localsMaster[partNumber][eco].keyenceCommandsetFileName = "Keyence_Barcode_Reader.cmdset";
             }
           }
         })
       })
-  
-      
-    //Now add every ECO to every part number
+
+
+    //TODO this logic is not quite right. If there are multiple locked ECO, we run into issues.
+    //I think I need to just throw an error if there are locked ECOs and not convert.
+
+    let localsMaster_copy = structuredClone(localsMaster);
+
+    // We need to add every ECO to every part number
     this.partNumbers.forEach(partNumber => {
-      ecoNumsMaster.forEach(ecoNum => {
-        if (!globalsMaster[partNumber].hasOwnProperty(ecoNum)) {
-          for(let existingEco in globalsMaster[partNumber]){
-            
-            let islocked = globalsMaster[partNumber][existingEco].hasOwnProperty("lockEC") && globalsMaster[partNumber][existingEco].lockEC == "true";
-  
-            if(globalsMaster[partNumber].hasOwnProperty(existingEco) && existingEco != "Defaults" && !islocked) {
-              globalsMaster[partNumber][ecoNum] = structuredClone(globalsMaster[partNumber][existingEco]);
+
+      // Check to see if there is already more than one ECO (besides the Defaults) associated with the part number. If there is, this measn there is a locked ECO.
+      let isDoulECO = Object.keys(localsMaster_copy[partNumber]).length > 2;
+
+      // Now we need make sure every part number has every ECO. Every ECO should be the same except if there is a unlocked and locked ECO.
+      // If that is the case we need to make sure the other ECOs are copies of the unlocked ECO.
+      this.ecoNumsMaster.forEach(ecoNum => {
+    
+        //Loop through the copy of the global part number
+        for(let existingEco in localsMaster_copy[partNumber]){
+          if(isDoulECO) {
+            if(localsMaster[partNumber][existingEco].ecoReleaseStatus == "true") {
+              localsMaster[partNumber][ecoNum] = structuredClone(localsMaster_copy[partNumber][existingEco]);
             }
           }
+          else {
+            localsMaster[partNumber][ecoNum] = structuredClone(localsMaster_copy[partNumber][existingEco]);
+          } 
         }
       })
-      
     })
   
      //Update the checked out svn exports folder incase it was already checked out.
@@ -564,29 +629,29 @@ class TestPlan {
      //Make the the iLEFT station folder is added
      fs.mkdirSync(`${projectPath}\\generatedConfig\\iLEFT`);
     
-    for(let partNum in globalsMaster) {
+    for(let partNum in localsMaster) {
   
       //Make sure we create the part number folders
       fs.mkdirSync(`${projectPath}\\generatedConfig\\${partNum}`);
-      //Write the globals to the part number folders
-      fs.writeFileSync(`${projectPath}\\generatedConfig\\${partNum}\\globals.json`, JSON.stringify(globalsMaster[partNum]), "utf-8");
+      //Write the locals to the part number folders
+      fs.writeFileSync(`${projectPath}\\generatedConfig\\${partNum}\\iLEFT\\locals.json`, JSON.stringify(localsMaster[partNum], null, 2), "utf-8");
       //Make sure the iLEFT station folder is created
-      fs.mkdirSync(`${projectPath}\\generatedConfig\\${partNum}\\iLEFT`);
+      //fs.mkdirSync(`${projectPath}\\generatedConfig\\${partNum}\\iLEFT`);
       //Make sure we have the empty limits and locals files
-      fs.writeFileSync(`${projectPath}\\generatedConfig\\${partNum}\\iLEFT\\limits.json`, "", "utf-8");
-      fs.writeFileSync(`${projectPath}\\generatedConfig\\${partNum}\\iLEFT\\locals.json`, "", "utf-8");  
+      //fs.writeFileSync(`${projectPath}\\generatedConfig\\${partNum}\\iLEFT\\limits.json`, "", "utf-8");
+      //fs.writeFileSync(`${projectPath}\\generatedConfig\\${partNum}\\iLEFT\\locals.json`, "", "utf-8");  
     }
 
     //Force add any new config files and commit to svn
-    svn.add(`${projectPath}\\generatedConfig`);
-  
+    //svn.add(`${projectPath}\\generatedConfig`);
+
     //Now we need to copy over the config files
     this.addConfigFiles();
   }
 
   addConfigFiles() {
     let testMethodFolderName = this.libraryName.replace("ileft.testmethods.", "");
-    console.log(testMethodFolderName);
+    
     let svnTestMethodsPath = `http://vcs.gentex.com/svn/testers/ea/iLEFT2/TestMethods`;
 
     const testMethodsLowerCaseMap = new Map( 
@@ -594,14 +659,12 @@ class TestPlan {
       return [folder.trim().toLowerCase(), folder.trim()];
       })
     );
-    console.log(testMethodsLowerCaseMap);
-
+  
     if(testMethodsLowerCaseMap.has(testMethodFolderName)) {
       let svnPath = svnTestMethodsPath + `/` + testMethodsLowerCaseMap.get(testMethodFolderName) + `/trunk/resources/`;
       const configFiles = svn.ls(svnPath).split("\n").forEach(file => {
         if(file != "") {
           svn.copy(svnPath + "/" + file.trim(), `${projectPath}\\generatedConfig\\iLEFT`);
-          console.log(svnPath + "/" + file.trim());
         }
       })
     }
@@ -659,18 +722,35 @@ class TestPlan {
     })
   
     masterTestGroupList.forEach((testGroupData, testGroupName, thisMap) => {
+
       //For each test group, the masterTestGroupList has an array of subtest arrays from each test plan we need to combine them into a single array of subtest that we can use to generate the evaluations.
       let masterSubTestArray = this.combineSubTests(testGroupData.arrayOfSubTests);
-      //console.log(masterSubTestArray);
+      
       //Add the assigned part numbers to the test group
       if(testGroupData.associatedPartNumbers.length < this.partNumbers.length) {
         this.DocObj.elements[testGroupData.groupID].assigned = this.generateBaseProperty(testGroupData.associatedPartNumbers.join(", "), "builtin", ""); 
       }
 
-       //Map{[key => groupName value => {groupID: groupID, subTests: Map{[key => subTestName value => subtestID], ...} }]}
-       this.groupAndEvalMap.set(testGroupName, {groupID: testGroupData.groupID, subTests: new Map()})
+      this.groupAndEvalMap[testGroupName] = {
+        groupID: testGroupData.groupID, 
+        subTests: new Map()
+      }
       
       masterSubTestArray.forEach(subTest => {
+
+        //If we run into a limitcheck that was only in one test plan and was never merged with another limit check from a different testplan, we need to add the boundLimitsMap
+        if(subTest.limitCheckEval == "1") {
+          if(!subTest.hasOwnProperty("boundLimitsMap")) {
+            subTest.boundLimitsMap = new Map();
+            subTest.associatedPartNumbers.forEach(partNum => {
+              subTest.boundLimitsMap.set(partNum, {lowLimit: subTest.lowLimit, highLimit: subTest.highLimit, value: subTest.value});
+            })  
+          }
+        }
+        // Make an empty boundLimitsMap property for the non limitcheck evals
+        else {
+          subTest.boundLimitsMap = "";
+        }
 
         //We have to be smart about how find the groupID of the measurement caller we want to use with this evaluation
         let measurementCaller = `${subTest.testMethod}`;
@@ -704,14 +784,14 @@ class TestPlan {
   
           this.DocObj.structure[testGroupData.groupID].children.push(scriptEvalID);
 
-          this.groupAndEvalMap.get(testGroupName).subTests.set(evalName, scriptEvalID);
+          this.groupAndEvalMap[testGroupName].subTests.set(evalName, { newName: evalName, subTestID: scriptEvalID, lowLimit: scriptEval.lowLimit, highLimit: scriptEval.highLimit, value: scriptEval.value, type: "SCRIPT", boundLimitsMap: subTest.boundLimitsMap});
         }
 
         const evaluationID = this.getEvaluationID();
 
         //If the subtest is a campare value type or is a data collect method that returns a true string, we have to convert the existing measurement call subroutine into a regular subroutine.
         //Compare value type tests are always on strings
-        if(subTest.compareDataEval == "1" || this.dataCollectionMethods.includes(subTest.name) ){
+        if((subTest.compareDataEval == "1" || this.dataCollectionMethods.includes(subTest.testMethod)) & this.DocObj.elements[measurementCallerID].properties.hasOwnProperty("measurementResult")){
           let measurementResult_Copy = structuredClone(this.DocObj.elements[measurementCallerID].properties.measurementResult);
           delete this.DocObj.elements[measurementCallerID].properties.measurementResult;
           this.DocObj.elements[measurementCallerID].properties.dataOutput = measurementResult_Copy;
@@ -741,6 +821,9 @@ class TestPlan {
               propertyValue = structuredClone(this.DocObj.elements[measurementCallerID].properties[property].value);
               targetOutput = property;
             }
+            else if (property == "stateIn" && !subTest.testArgs.has("stateIn")) {
+              propertyValue = subTest.testArgs.get("stateParameter");
+            }
             else if (!subTest.testArgs.has(property)) {
               propertyValue = '';
             }
@@ -763,18 +846,74 @@ class TestPlan {
   
         this.DocObj.structure[testGroupData.groupID].children.push(evaluationID);
 
-        this.groupAndEvalMap.get(testGroupName).subTests.set(subTest.name, evaluationID);
-  
+        let testType = "";
+        if(subTest.limitCheckEval == "1") {testType = "LIMITCHECK";}
+        else if(subTest.passFailEval == "1") {testType = "PASSFAIL";}
+        else if(subTest.exactValEval == "1") {testType = "EXACT"}
+        else if(subTest.collectDataEval == "1") {testType = "COLLECTION"}
+        else if(subTest.compareDataEval == "1") {testType = "STRING"}
+
+        this.groupAndEvalMap[testGroupName].subTests.set(subTest.name, {newName: evaluation.description, subTestID: evaluationID, lowLimt: subTest.lowLimit, highLimit: subTest.highLimit, value: subTest.value, type: testType, boundLimitsMap: subTest.boundLimitsMap});
       })
     })
+  }
+
+  addLimitsAndGlobals() {
+
+    this.partNumbers.forEach( partNum => {
+      let limits = {};
+      let globals = {};
+      limits[partNum] = [];
+      let SpecLimits = [];
+
+      //Make sure the iLEFT station folder is created
+      fs.mkdirSync(`${projectPath}\\generatedConfig\\${partNum}\\iLEFT`);
+
+      for(const groupName in this.groupAndEvalMap) {
+        this.groupAndEvalMap[groupName].subTests.forEach(subTestData => {
+          if(subTestData.type == "LIMITCHECK") {
+            if(subTestData.boundLimitsMap.has(partNum)) {
+              SpecLimits.push({
+                Description: "", 
+                HighLimit: subTestData.boundLimitsMap.get(partNum).highLimit,
+                IgnoreCalcCheck: false,
+                LowLimit: subTestData.boundLimitsMap.get(partNum).lowLimit,
+                MeasuredValue: subTestData.boundLimitsMap.get(partNum).value,
+                TagName: subTestData.newName
+              })
+            }
+          }
+        })
+      }
+
+      limits[partNum].push({EcoNum: "Defaults", SpecLimits: SpecLimits});
+      globals.Defaults = {};
+
+      this.ecoNumsMaster.forEach(ECO => {
+        limits[partNum].push({EcoNum: ECO, SpecLimits: SpecLimits});
+        globals[ECO] = {};
+      })
+
+      fs.writeFileSync(`${projectPath}\\generatedConfig\\${partNum}\\iLEFT\\limits.json`, JSON.stringify(limits, null, 2), "utf-8");
+      fs.writeFileSync(`${projectPath}\\generatedConfig\\${partNum}\\globals.json`, JSON.stringify(globals, null, 2), "utf-8");
+    })
+
+    //Force add any new config files and commit to svn
+    svn.add(`${projectPath}\\generatedConfig`);
   }
   
   generateWaveformSaveScript(checkIfFailedStr, evaluationID) {
     let waveformSript = `${evaluationID}.checkIfFailed = !(`;
     checkIfFailedStr.split("|").forEach(testToCheck => {
       const testToCheckArray = testToCheck.split("::");
-      let evalIDToCheck = this.groupAndEvalMap.get(testToCheckArray[0]).subTests.get(testToCheckArray[1]);
-      waveformSript += `${evalIDToCheck}.runtime.passed || `;
+
+
+      if(this.groupAndEvalMap[testToCheckArray[0]].subTests.has(testToCheckArray[1]))
+      {
+        let evalIDToCheck = this.groupAndEvalMap[testToCheckArray[0]].subTests.get(testToCheckArray[1]).subTestID;
+        waveformSript += `${evalIDToCheck}.runtime.passed || `;
+      }
+      
     })
     return waveformSript.slice(0,-4) + ");";
   }
@@ -804,8 +943,8 @@ class TestPlan {
           let newSubTestName = oldSubTestName;
           let i = 1;
           while(masterSubTestMap.has(newSubTestName) && !merged)  {
-            let areSimilar = this.areSubTestsSimilar(subTest, masterSubTestMap.get(newSubTestName))
-            if(areSimilar) {
+           
+            if(this.areSubTestsSimilar(subTest, masterSubTestMap.get(newSubTestName))) {
               masterSubTestMap.set(newSubTestName, this.mergeSimilarSubTests(subTest, masterSubTestMap.get(newSubTestName)));
               merged = true;
             }
@@ -844,6 +983,7 @@ class TestPlan {
     let binary = subtest1.testBinary == subtest2.testBinary;
     let lowLimit = subtest1.lowLimit == subtest2.lowLimit;
     let highLimit = subtest1.highLimit == subtest2.highLimit;
+    let limitCheck = subtest1.limitCheckEval == "1" && subtest2.limitCheckEval == "1";
     let args = true;
 
     subtest1.testArgs.forEach((value, key) => {
@@ -851,11 +991,17 @@ class TestPlan {
         args = args && (value == subtest2.testArgs.get(key));
       }
     })
-    return (name && binary && lowLimit && highLimit && args);
+
+    if((!limitCheck && name && binary && lowLimit && highLimit && args) || (limitCheck && name && binary && args)) {
+      return 1;
+    }
+    else {
+      return 0;
+    }
   }
 
   mergeSimilarSubTests(subtest1, subtest2) {
-    
+
     let mergedSubTests = subtest1;
     if(subtest2.description.length > subtest1.description.length) {
       mergedSubTests.description = subtest2.description;
@@ -877,8 +1023,32 @@ class TestPlan {
     }
     let limitMiddle = (subtest1.highLimit + subtest1.lowLimit)/2;
     if(Math.abs(limitMiddle - subtest2.value) < Math.abs(limitMiddle - subtest1.value)) {
-      mergedSubTests.value = subtest2.value;
+       mergedSubTests.value = subtest2.value;
     }
+
+    if((limitCheck = subtest1.limitCheckEval == "1" && subtest2.limitCheckEval == "1") && (subtest1.lowLimit != subtest2.lowLimit || subtest1.highLimit != subtest2.highLimit)){
+
+      if(!mergedSubTests.hasOwnProperty(boundLimitsMap)) {
+        mergedSubTests.boundLimitsMap = new Map();
+        mergedSubTests.lowLimit = "bound";
+        mergedSubTests.lowLimit = "bound";
+        mergedSubTests.value = "bound";
+        subtest1.associatedPartNumbers.forEach( partNum => {
+          mergedSubTests.boundLimitsMap.set(partNum, {lowLimit: subtest1.lowLimit, highLimit: subtest1.highLimit, value: subtest1.value})
+        })
+        subtest2.associatedPartNumbers.forEach( partNum => {
+          mergedSubTests.boundLimitsMap.set(partNum, {lowLimit: subtest2.lowLimit, highLimit: subtest2.highLimit, value: subtest2.value})
+        })
+      }
+      else {
+        subtest2.associatedPartNumbers.forEach( partNum => {
+          if(!mergedSubTests.boundLimitsMap.has(partNum)) {
+            mergedSubTests.boundLimitsMap.set(partNum, {lowLimit: subtest2.lowLimit, highLimit: subtest2.highLimit, value: subtest2.value})
+          }
+        })
+      }
+    }
+
     mergedSubTests.associatedPartNumbers = Array.from( new Set(subtest1.associatedPartNumbers.concat(subtest2.associatedPartNumbers)) );
 
     return mergedSubTests;
@@ -893,9 +1063,16 @@ class TestPlan {
     else if(subTestObj.collectDataEval == "1") {testType = "COLLECTION"}
     else if(subTestObj.compareDataEval == "1") {testType = "STRING"}
     
+    //This may need to change. Limit the eval name to 50 characters.
+    let evalName = `${testGroupName}_${subTestObj.name}`;
+    if (evalName.length > 50) {
+      evalName = evalName.substring(0,48) + "__";
+    }
+
     //If you want the subtest names to be prefixed with the testgroup names, use the line below
-    //let evaluation = this.generateBaseGroup("evaluation", `${testGroupName}_${subTestObj.name}`, parentIdentifier, "Body", {}, subTestObj.skipTest == "0" ? false : true);
-    let evaluation = this.generateBaseGroup("evaluation", `${subTestObj.name}`, parentIdentifier, "Body", {}, subTestObj.skipTest == "0" ? false : true);
+    let evaluation = this.generateBaseGroup("evaluation", evalName, parentIdentifier, "Body", {}, subTestObj.skipTest == "0" ? false : true);
+     //If you want the subtest names to NOT be prefixed with the testgroup names, use the line below
+    //let evaluation = this.generateBaseGroup("evaluation", `${subTestObj.name}`, parentIdentifier, "Body", {}, subTestObj.skipTest == "0" ? false : true);
     evaluation.comment = this.generateBaseProperty(subTestObj.description, "builtin", "");
     evaluation.loop = this.generateBaseProperty(parseInt(subTestObj.loopCount), "builtin", "");
     evaluation.retry = this.generateBaseProperty(parseInt(subTestObj.retryCount), "builtin", "");
@@ -904,10 +1081,23 @@ class TestPlan {
     evaluation.preExecuteDelay = this.generateBaseProperty(parseInt(subTestObj.preDelayMillis), "builtin", "");
     evaluation.postExecuteDelay = this.generateBaseProperty(parseInt(subTestObj.postDelayMillis), "builtin", "");
     
-    evaluation.value = this.generateBaseProperty(subTestObj.value, "builtin", "");
-    evaluation.highLimit = this.generateBaseProperty(subTestObj.highLimit, "builtin", "");
-    evaluation.lowLimit = this.generateBaseProperty(subTestObj.lowLimit, "builtin", "");
     evaluation.evaluationType = this.generateBaseProperty(testType, "builtin", "");
+    if(testType == "LIMITCHECK" ) {
+      evaluation.value = this.generateBaseProperty("configuration.ev_" + evalName, "builtin", "");
+      evaluation.highLimit = this.generateBaseProperty("configuration.ll_" + evalName, "builtin", "");
+      evaluation.lowLimit = this.generateBaseProperty("configuration.hl_" + evalName, "builtin", "");
+
+      //Add these to the config element so they can be bound
+      this.DocObj.elements.configuration.properties["ll_" + evalName] = this.generateBaseProperty("", "string", "");
+      this.DocObj.elements.configuration.properties["hl_" + evalName] = this.generateBaseProperty("", "string", "");
+      this.DocObj.elements.configuration.properties["ev_" + evalName] = this.generateBaseProperty("", "string", "");
+    }
+    else {
+      evaluation.value = this.generateBaseProperty(subTestObj.value, "builtin", "");
+      evaluation.highLimit = this.generateBaseProperty(subTestObj.highLimit, "builtin", "");
+      evaluation.lowLimit = this.generateBaseProperty(subTestObj.lowLimit, "builtin", "");
+    }
+   
     evaluation.target = this.generateBaseProperty(target, "builtin", "");
     evaluation.skipped = this.generateBaseProperty(false, "builtin", "");
     evaluation.updateTestMetrics = this.generateBaseProperty(true, "builtin", "");
@@ -928,6 +1118,9 @@ class TestPlan {
     let methodValue;
     if(library == "ileft.testmethods.instrumentcontrol") {
       methodValue = "IleftInstrumentsTestMethods_" + method;
+    }
+    else if(library == "gtm.utilities.subversionclient") {
+      methodValue = "SVNUtils_" + method;
     }
     else if(library == "ileft.platform.iptehandler") {
       methodValue = "iptehandler_" + method;
