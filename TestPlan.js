@@ -335,11 +335,11 @@ class TestPlan {
     this.DocObj.structure.universalPartNumber.children.push(tearDownGroupID);
 
     //Create the teardown binding call
-    this.DocObj.elements[tearDownID] = this.generateBaseBindingCall("bindingCall", "TearDown", tearDownGroupID, "Teardown", this.genPhaseBCProps(projectLibraryData.functions.get("TearDown").params), this.libraryName, "TearDown", false);
+    this.DocObj.elements[tearDownID] = this.generateBaseBindingCall("bindingCall", "TearDown", tearDownGroupID, "Teardown", this.genPhaseBCProps(projectLibraryData.functions.get("TearDown").params), this.libraryName, "TearDown", true);
     this.DocObj.structure[tearDownID] = this.generateBaseStructure("bindingCall", []);
 
     //Create the send end message binding call
-    this.DocObj.elements[endMessageID] = this.generateBaseBindingCall("bindingCall", "SendEndMessage", tearDownGroupID, "Teardown", this.genPhaseBCProps(ipteLibraryData.functions.get("SendEndMessage").params), "ileft.platform.iptehandler", "SendEndMessage", false);
+    this.DocObj.elements[endMessageID] = this.generateBaseBindingCall("bindingCall", "SendEndMessage", tearDownGroupID, "Teardown", this.genPhaseBCProps(ipteLibraryData.functions.get("SendEndMessage").params), "ileft.platform.iptehandler", "SendEndMessage", true);
     this.DocObj.structure[endMessageID] = this.generateBaseStructure("bindingCall", []);
   }
 
@@ -424,32 +424,32 @@ class TestPlan {
     
     managedPartNumber.columns = this.generateBaseProperty(numberOfIndexes, "builtin", "");
 
-    managedPartNumber.arrayType = this.generateBaseProperty("SCRIPTED", "builtin", "");
-    managedPartNumber.arrayCode = this.generateBaseProperty(this.generateArrayCode(numberOfIndexes), "builtin", "");
+    //Add the array code properties for threaded indexes. 
+    //We do this here because we already have numberOfIndexes and I don't want to change a bunch of stuff  
+    this.DocObj.elements.universalPartNumber.arrayType = this.generateBaseProperty("SCRIPTED", "builtin", "");
+    this.DocObj.elements.universalPartNumber.arrayCode = this.generateBaseProperty(this.generateArrayCode(numberOfIndexes), "builtin", "");
 
     return managedPartNumber;
   }
 
   generateArrayCode(numberOfIndexes) {
-    let arrayCode = `{\"indexes\":[`
+    let arrayCode = `\"Array {\\n`
 
     for(let i = 1; i <= numberOfIndexes; i++) {
       let index = i.toString();
-      arrayCode += `{\"row\":1,\"column\":${index},\"description\":\"Index ${index}\",\"enabled\":true,\"identifier\":${index}},`
+      arrayCode += `    Index { row: 1; column: ${index}; identifier: ${index} }\\n`
     }
 
-    arrayCode  = arrayCode.slice(0,-1);
-    
-    arrayCode += `],\"sequences\":[`
-    
-    for(let i = 1; i <= numberOfIndexes; i++) {
+    arrayCode += `\\n`;
+
+    for(let i = 1; i <= numberOfIndexes; i++){
       let index = i.toString();
-      arrayCode += `{\"description\":\"Thread (${index})\",\"identifier\":${index},\"serialSteps\":{\"steps\":[${index}]}},`
+      arrayCode += `    Sequence {\\n        identifier: ${index};\\n        description: \\"Thread ${index}\\";\\n        SerialStep: { steps: [ ${index} ] }\\n    }\\n\\n`        
     }
 
     arrayCode  = arrayCode.slice(0,-1);
 
-    arrayCode += `]}`
+    arrayCode += `}\"`
    
     return arrayCode;
   }
@@ -1071,7 +1071,7 @@ class TestPlan {
 
     //If you want the subtest names to be prefixed with the testgroup names, use the line below
     let evaluation = this.generateBaseGroup("evaluation", evalName, parentIdentifier, "Body", {}, subTestObj.skipTest == "0" ? false : true);
-     //If you want the subtest names to NOT be prefixed with the testgroup names, use the line below
+    //If you want the subtest names to NOT be prefixed with the testgroup names, use the line below
     //let evaluation = this.generateBaseGroup("evaluation", `${subTestObj.name}`, parentIdentifier, "Body", {}, subTestObj.skipTest == "0" ? false : true);
     evaluation.comment = this.generateBaseProperty(subTestObj.description, "builtin", "");
     evaluation.loop = this.generateBaseProperty(parseInt(subTestObj.loopCount), "builtin", "");
@@ -1084,8 +1084,8 @@ class TestPlan {
     evaluation.evaluationType = this.generateBaseProperty(testType, "builtin", "");
     if(testType == "LIMITCHECK" ) {
       evaluation.value = this.generateBaseProperty("configuration.ev_" + evalName, "builtin", "");
-      evaluation.highLimit = this.generateBaseProperty("configuration.ll_" + evalName, "builtin", "");
-      evaluation.lowLimit = this.generateBaseProperty("configuration.hl_" + evalName, "builtin", "");
+      evaluation.highLimit = this.generateBaseProperty("configuration.hl_" + evalName, "builtin", "");
+      evaluation.lowLimit = this.generateBaseProperty("configuration.ll_" + evalName, "builtin", "");
 
       //Add these to the config element so they can be bound
       this.DocObj.elements.configuration.properties["ll_" + evalName] = this.generateBaseProperty("", "string", "");

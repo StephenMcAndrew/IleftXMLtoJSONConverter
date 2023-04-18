@@ -366,6 +366,20 @@ function parseINIsToJSObjArray(iniStringArray){
                     paramsMap.set("ecoReleaseStatus", "true" );
                 }
 
+                //We want to change the names of the following params a bit. These match what we use in combo better.
+                if (paramsMap.has("opsManagerPartNumber")) {
+                    paramsMap.set("opsManPartNumber", paramsMap.get("opsManagerPartNumber"));
+                    paramsMap.delete("opsManagerPartNumber");
+                }
+                if (paramsMap.has("opsManagerBOMRevision")) {
+                    paramsMap.set("opsManBomRevision", paramsMap.get("opsManagerBOMRevision"));
+                    paramsMap.delete("opsManagerBOMRevision");
+                }
+                if (paramsMap.has("opsManagerVersion")) {
+                    paramsMap.set("opsManVersion", paramsMap.get("opsManagerVersion"));
+                    paramsMap.delete("opsManagerVersion");
+                }
+
                 //We always need to have this
                 paramsMap.set("enableOpsManager", "true");
 
