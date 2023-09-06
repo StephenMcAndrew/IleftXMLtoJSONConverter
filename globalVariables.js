@@ -3,10 +3,11 @@
 **********************************************/
 
 let theTestPlan; // The main testplan object that we will build up from the parsed data in the .planxml files
-//let testPlanName = "Stephens-Development-TestPlan";
-let testPlanName = "iLEFT_Calibration"
+let testPlanName = "Stephens-Development-TestPlan";
+//let testPlanName = "ILEFT_DEBUG"
 let svnConfigPath = "http://vcs.gentex.com/svn/testers/deployment/exports/products/iLEFT";
-let projectPath = ""; // The local directory the .planxml files arr checked out to
+let projectPath = ""; // The local directory the .planxml files are checked out to
+let isCalTestplan = false;
 
 // Variables needed for the HTTP request to get the bearer token
 let bearerToken; //The bearer token that will be used for the mutation http request

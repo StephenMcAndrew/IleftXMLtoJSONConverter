@@ -149,9 +149,10 @@ function getTestBinaries(xmlDocArray)
         }
     });
 
-    //We also need the IPTE library
+    //We also need the IPTE library, SVN client, and qtui
     masterTestBinaryArray.push("ileft.platform.iptehandler");
     masterTestBinaryArray.push("gtm.utilities.subversionclient");
+    masterTestBinaryArray.push("gtm.utilities.qtui");
 
     return masterTestBinaryArray;
 }
@@ -199,7 +200,6 @@ Map{
 */
 function getDciGenLibrariesInfo(testBinaries) { 
     const dciGenLibrariesInfo = new Map();
-    
     testBinaries.forEach(testBinary => {
         
         const xhr_TPE = new XMLHttpRequest();
@@ -235,8 +235,11 @@ function getDciGenLibrariesInfo(testBinaries) {
             variables: {}
         };
 
+        console.log(JSON.stringify(dataToSend));
+
         xhr_TPE.send(JSON.stringify(dataToSend));
         let response = JSON.parse(xhr_TPE.responseText);
+        console.log(response);
         const versions = response.data.library.versions;
         dciGenLibrariesInfo.set(testBinary, versions[versions.length - 1]);
 

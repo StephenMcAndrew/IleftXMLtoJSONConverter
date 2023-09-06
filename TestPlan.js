@@ -13,6 +13,8 @@ class TestPlan {
     this.partNumbers; //An array of all the partnumbers
     this.ecoNumsMaster = new Set(); //A list of all the ECO numbers
 
+    this.ipteRunnerSub_ID; 
+
     // This is used to keep track of which groupID and bindingCallID goes with which measurement caller
     // Map{[key => MeasurementCallerName value => {library: libraryName, groupID: groupID, bindingCallID: bindingCallID}]}
     this.measurementCallerMap = new Map();
@@ -65,27 +67,35 @@ class TestPlan {
     const universalPartNumberChildren = []; //Keeps track of the groupIDs associated with the measurement subroutines so we can add them as children of the UVPN in the doc obj structure
     const masterListOfFuncNames = []; //Keeps track of all the measurement caller subroutine names used in the doc objec
     const masterListOfLibraries = []; //Keep track of all the libraries used so we can create the bundle management property
+
+    if(isCalTestplan ) {
+      //If it doesn't have a main library, it's one of the cal testplans and only uses instrumentcontrol
+      this.libraryName = "ileft.testmethods.instrumentcontrol";
+    }
+
     //Loop through each DCIGen library used in the testplans
-    dciGenLibrariesInfo.forEach((libraryData, libraryName) => {
+    dciGenLibrariesInfo.forEach((libraryData, libName) => {
 
       //Set the testplan's main library name. We'll use this when when creating the init, load, unload, and teardown phases.
       //I'm assuming a testplan only evey uses instrumentcontrol, iptehandler, and it's main product library
-      if(libraryName != "ileft.testmethods.instrumentscontrol" && libraryName != "ileft.platform.iptehandler" && libraryName != "gtm.utilities.subversionclient") {
-        this.libraryName = libraryName;
+      if(libName != "ileft.testmethods.instrumentcontrol" && libName != "ileft.platform.iptehandler" && libName != "gtm.utilities.subversionclient" && libName != "gtm.utilities.qtui") {
+        this.libraryName = libName;
       }
-
+    
       //Add the bundle property to the universal part number
-      let bundleName = libraryName + "." + libraryData.versionNumber + "-" + libraryData.platformName;
+      let bundleName = libName + "." + libraryData.versionNumber + "-" + libraryData.platformName;
       masterListOfLibraries.push(bundleName);
       this.DocObj.elements.universalPartNumber.properties["bundle" + bundleNumber.toString()] = this.generateBaseProperty(bundleName, "string", "");
       bundleNumber++;
 
       // Don't add any meathods fom the iptehandler or the subversionclient library. That's handled when the init, load, unload, and teardown phases are added.
-      if(libraryName != "ileft.platform.iptehandler" && libraryName != "gtm.utilities.subversionclient") {
+      if(libName != "ileft.platform.iptehandler" && libName != "gtm.utilities.subversionclient" && libName != "gtm.utilities.qtui") {
+
         //Loop through all the functions in the DCIGen library
         libraryData.functions.forEach(func => {
+
           //If the function is used in the testplans, we need to add a measurement caller for it
-          if (testPlanMethods[libraryName].includes(func.name)) {
+          if (testPlanMethods[libName].includes(func.name)) {
             //Creat the group and binding call ids
             let groupID = this.getGroupID();
             let bindingCallID = this.getBindingCallID();
@@ -103,7 +113,7 @@ class TestPlan {
             }
             masterListOfFuncNames.push(functionName); //Keep track of all the used function names
             //Keep track of all the measurement caller names and what library they use. We'll need this when we start adding the subtest evaluations.
-            this.measurementCallerMap.set(functionName, {library: libraryName, groupID: groupID, bindingCallID: bindingCallID}); 
+            this.measurementCallerMap.set(functionName, {library: libName, groupID: groupID, bindingCallID: bindingCallID}); 
             
             //Generate the measurement caller and binding call properties from the DCIGen params
             func.params.forEach(param => {
@@ -175,7 +185,7 @@ class TestPlan {
             this.DocObj.elements[groupID].loop = this.generateBaseProperty(0, "builtin", "");
   
             //Create the binding call
-            this.DocObj.elements[bindingCallID] = this.generateBaseBindingCall("bindingCall", functionName, groupID, "Init", BindingCallProps, libraryName, func.name, true);
+            this.DocObj.elements[bindingCallID] = this.generateBaseBindingCall("bindingCall", functionName, groupID, "Init", true, BindingCallProps, libName, func.name, true);
       
             //Add the measurement subroutine and binding call to the doc object structure
             this.DocObj.structure[groupID] = this.generateBaseStructure("group", [bindingCallID]);
@@ -201,6 +211,9 @@ class TestPlan {
       else if(library.startsWith("gtm.utilities.subversionclient")) {
         bundleManagementValue += `windows-x32-vc10 AKA svnClient { ${library} }; `
       }
+      else if(library.startsWith("gtm.utilities.qtui")) {
+        bundleManagementValue += `windows-x32-vc10 AKA qtui { ${library} }; `
+      }
       else {
         bundleManagementValue += `windows-x32-any AKA productLibrary { ${library} }; `
       }
@@ -223,62 +236,256 @@ class TestPlan {
     let projectLibraryData = dciGenLibrariesInfo.get(this.libraryName);
     let ipteLibraryData = dciGenLibrariesInfo.get("ileft.platform.iptehandler");
     let subversionclientLibraryData = dciGenLibrariesInfo.get("gtm.utilities.subversionclient");
+    let qtuiLibraryData = dciGenLibrariesInfo.get("gtm.utilities.qtui");
 
-    //Generate all the IDs for the init phase
-    let initGroupID = this.getGroupID();
-    //let removeDirID = this.getBindingCallID();
-    let svnExportID = this.getBindingCallID();
-    let setupID = this.getBindingCallID();
-    let initializeID = this.getBindingCallID();
-    let startMessageID = this.getBindingCallID();
+    //Generate all the IDs for the init phases
+    let Init_FixtureCheck_GroupID = this.getGroupID();
+    let ReadJigIDsID = this.getBindingCallID();
+    let ValidateJigIDsID = this.getEvaluationID();
 
+    let Init_Exports_GroupID = this.getGroupID();
+    let RemoveDirID = this.getBindingCallID();
+    let DefaultStationExportID = this.getBindingCallID();
 
-    //Generate all the IDs for the load phase
-    let loadGroupID = this.getGroupID();
-    let startOfTestsID = this.getBindingCallID();
-    let waitForReadyID = this.getBindingCallID();
+    let Init_ProductLib_GroupID = this.getGroupID();
+    let SetupID = this.getBindingCallID();
 
-    //Setup the init group
-    this.DocObj.elements[initGroupID] = this.generateBaseGroup("group", "Init", "universalPartNumber", "Init", {}, false);
-    this.DocObj.structure[initGroupID] = this.generateBaseStructure("group", [/*removeDirID,*/ svnExportID, setupID, initializeID, startMessageID]);
-    this.DocObj.structure.universalPartNumber.children.push(initGroupID);
+    let Init_IpteRunnerActive_GroupID = this.getGroupID();
+    let CallProcessRunning_ipte_runnerID = this.getEvaluationID();
+    let IpteRunnerSubroutine_GroupID = this.getGroupID();
+    this.ipteRunnerSub_ID = IpteRunnerSubroutine_GroupID;
+    let IsProcessActiveID = this.getBindingCallID();
+    let NotifyIfNotRunningIpteRunnerID = this.getEvaluationID();
+    let DisplayMessageBoxID = this.getBindingCallID();
 
-    //Create the binding calls to remove the old config folder and then copy over the new ones.
-    //this.DocObj.elements[removeDirID] = this.generateBaseBindingCall("bindingCall", "RemoveDir", initGroupID, "Init", this.genPhaseBCProps(projectLibraryData.functions.get("RemoveDir").params), this.libraryName, "RemoveDir", false);
-    //this.DocObj.structure[removeDirID] = this.generateBaseStructure("bindingCall", []);
-    console.log(svnExportID);
-    this.DocObj.elements[svnExportID] = this.generateBaseBindingCall("bindingCall", "DefaultStationExport", initGroupID, "Init", this.genPhaseBCProps(subversionclientLibraryData.functions.get("DefaultStationExport").params), "gtm.utilities.subversionclient", "DefaultStationExport", false);
-    this.DocObj.structure[svnExportID] = this.generateBaseStructure("bindingCall", []);
+    let Init_IPTE_GroupID = this.getGroupID();
+    let RunInitializeID = this.getBindingCallID();
+    
+    //Generate all the IDs for the load phases
+    let Load_StartOfTests_GroupID = this.getGroupID();
+    let StartOfTestsID = this.getBindingCallID();;
+
+    let Load_IpteRunnerActive_GroupID = this.getGroupID();
+    let CallProcessRunning_ipte_runnerID_2 = this.getEvaluationID();
+
+    let Load_IpteWaitForReadyToTest_GroupID = this.getGroupID();
+    let RunWaitForReadyToTestID = this.getBindingCallID();
+
+    //We need to add the ProcessRunning_ipte-runner sub routine
+    let ipteSubProps = {ipteActive: this.generateBaseProperty(false, "boolean", "")};
+
+    this.DocObj.elements[IpteRunnerSubroutine_GroupID] = this.generateBaseGroup("group", "ProcessRunning_ipte-runner", "universalPartNumber", "Init", ipteSubProps, true);
+    this.DocObj.elements[IpteRunnerSubroutine_GroupID].retry = this.generateBaseProperty(0, "builtin", "");
+    this.DocObj.elements[IpteRunnerSubroutine_GroupID].loop = this.generateBaseProperty(0, "builtin", "");
+
+    this.DocObj.structure[IpteRunnerSubroutine_GroupID] = this.generateBaseStructure("group", [IsProcessActiveID, NotifyIfNotRunningIpteRunnerID, DisplayMessageBoxID]);
+    this.DocObj.structure.universalPartNumber.children.push(IpteRunnerSubroutine_GroupID);
+
+    let IsPorcessActiveParams = this.genPhaseBCProps(ipteLibraryData.functions.get("IsProcessActive").params);
+    IsPorcessActiveParams.processName.value = "ipte-runner.exe";
+
+    this.DocObj.elements[IsProcessActiveID] = this.generateBaseBindingCall("bindingCall", "IsProcessActive", IpteRunnerSubroutine_GroupID, "Init", false, IsPorcessActiveParams, "ileft.platform.iptehandler", "IsProcessActive", false)
+    this.DocObj.structure[IsProcessActiveID] = this.generateBaseStructure("bindingCall", []);
+
+    let NotifyIpteScript = 
+    `runtime.passed = false;
+
+${DisplayMessageBoxID}.skipped = false;
+${IpteRunnerSubroutine_GroupID}.ipteActive = ${IsProcessActiveID}.processActive;
+    
+if( ${IsProcessActiveID}.processActive )
+{
+  ${DisplayMessageBoxID}.skipped = true;
+}
+    
+runtime.passed = true;`;
+
+    let NotifyIpteEval= this.generateBaseGroup("evaluation", "NotifyIfRunningIpteRunner", IpteRunnerSubroutine_GroupID, "Init", {}, false);
+    NotifyIpteEval.evaluationType = this.generateBaseProperty("SCRIPTED", "builtin", "");
+    NotifyIpteEval.lowLimit = this.generateBaseProperty("0", "builtin", "");
+    NotifyIpteEval.highLimit = this.generateBaseProperty("0", "builtin", "");
+    NotifyIpteEval.value = this.generateBaseProperty("0", "builtin", "");
+    NotifyIpteEval.runtimeResume = this.generateBaseProperty(false, "builtin", "");
+    NotifyIpteEval.updateTestMetrics = this.generateBaseProperty(false, "builtin", "");
+    NotifyIpteEval.onEvaluate = this.generateBaseProperty(NotifyIpteScript, "builtin", "");
+   
+    this.DocObj.elements[NotifyIfNotRunningIpteRunnerID] = NotifyIpteEval;
+    this.DocObj.structure[NotifyIfNotRunningIpteRunnerID] = this.generateBaseStructure("evaluation", []);
+
+    let DisplayMessageBoxIDParams = this.genPhaseBCProps(qtuiLibraryData.functions.get("DisplayMessageBox").params);
+    DisplayMessageBoxIDParams.cancelButton.value = false;
+    DisplayMessageBoxIDParams.closable.value = false;
+    DisplayMessageBoxIDParams.mType.value = "critical";
+    DisplayMessageBoxIDParams.text.value = "Please launch ipte-runner.exe";
+    DisplayMessageBoxIDParams.title.value = "Critical Warning";
+
+    this.DocObj.elements[DisplayMessageBoxID] = this.generateBaseBindingCall("bindingCall", "DisplayMessageBox", IpteRunnerSubroutine_GroupID, "Init", false, DisplayMessageBoxIDParams, "gtm.utilities.qtui", "DisplayMessageBox", false);
+    this.DocObj.structure[DisplayMessageBoxID] = this.generateBaseStructure("bindingCall", []);
+
+    //Setup Init_FixtureCheck group
+    this.DocObj.elements[Init_FixtureCheck_GroupID] = this.generateBaseGroup("group", "Init_FixtureCheck", "universalPartNumber", "Init", {}, false);
+    this.DocObj.structure[Init_FixtureCheck_GroupID] = this.generateBaseStructure("group", [ReadJigIDsID, ValidateJigIDsID]);
+    this.DocObj.structure.universalPartNumber.children.push(Init_FixtureCheck_GroupID);
+
+    //Create ReadJigIDs binding Call
+    this.DocObj.elements[ReadJigIDsID] = this.generateBaseBindingCall("bindingCall", "ReadJigIDs", Init_FixtureCheck_GroupID, "Init", false, this.genPhaseBCProps(ipteLibraryData.functions.get("ReadJigIDs").params), "ileft.platform.iptehandler", "ReadJigIDs", false);
+    this.DocObj.structure[ReadJigIDsID] = this.generateBaseStructure("bindingCall", []);
+
+    let ValidateJigIDsScript = 
+    `runtime.passed = true;
+    
+currentJigSet = "";
+var expectedJigs = configuration.fixtureId;
+var jigArray = expectedJigs.split( "," );
+var currentTop = ${ReadJigIDsID}.jigTop;
+var currentBot = ${ReadJigIDsID}.jigBottom;
+    
+__report__.log( "Expected Jig Ids Raw: " + expectedJigs );
+__report__.log( "Jig Array size: " + jigArray.length );
+__report__.log( "Current Top Jig: " + currentTop );
+__report__.log( "Current Bot Jig: " + currentBot );
+    
+//Remove any zero padding from current jigs
+while( currentTop.substring(0,1) == "0" ) {
+  currentTop = currentTop.slice(1);
+  //__report__.log( "Current Top Jig Sliced: " + currentTop );
+}
+    
+while( currentBot.substring(0,1) == "0" ) {
+  currentBot = currentBot.slice(1);
+  //__report__.log( "Current Bot Jig Sliced: " + currentBot );
+}
+    
+// Add "0x" to currentTop and currentBot
+currentTop = "0x" + currentTop;
+currentBot = "0x" + currentBot;
+    
+//Top and Bottom Fixture Ids must match
+if( currentTop != currentBot ) {
+  __report__.log( "Current Top Jig: " + currentTop + " does not match current bottom jig: " + currentBot );
+  runtime.passed = false;
+}
+    
+// Check if current fixtures are found in expected fixture list
+if( !jigArray.includes( currentTop ) ) {
+  __report__.log( "Current Jig Set: " + currentTop + " does not exist in list of expected fixtures: " + expectedJigs );
+  runtime.passed = false;
+}
+    
+if( runtime.passed ) {
+  currentJigSet = currentTop + "," + currentBot;
+  __report__.log("Current Jig Set: " + currentJigSet );
+}`;
+   
+    //Create ValidateJigIDs evaluation Call
+    let ValidateJigIDsEval= this.generateBaseGroup("evaluation", "ValidateJigIDs", Init_FixtureCheck_GroupID, "Init", {}, false);
+    ValidateJigIDsEval.evaluationType = this.generateBaseProperty("SCRIPTED", "builtin", "");
+    ValidateJigIDsEval.lowLimit = this.generateBaseProperty("0", "builtin", "");
+    ValidateJigIDsEval.highLimit = this.generateBaseProperty("0", "builtin", "");
+    ValidateJigIDsEval.value = this.generateBaseProperty("0", "builtin", "");
+    ValidateJigIDsEval.runtimeResume = this.generateBaseProperty(false, "builtin", "");
+    ValidateJigIDsEval.updateTestMetrics = this.generateBaseProperty(true, "builtin", "");
+    ValidateJigIDsEval.onEvaluate = this.generateBaseProperty(ValidateJigIDsScript, "builtin", "");
+    ValidateJigIDsEval.currentJigSet = this.generateBaseProperty("ValidateJigIDsScript", "string", "[OUTPUT]");
+
+   
+    this.DocObj.elements[ValidateJigIDsID] = ValidateJigIDsEval;
+    this.DocObj.structure[ValidateJigIDsID] = this.generateBaseStructure("evaluation", []);
+
+    //Setup the Init_Exports group
+    this.DocObj.elements[Init_Exports_GroupID] = this.generateBaseGroup("group", "Init_Exports", "universalPartNumber", "Init", {}, false);
+    this.DocObj.structure[Init_Exports_GroupID] = this.generateBaseStructure("group", [RemoveDirID, DefaultStationExportID]);
+    this.DocObj.structure.universalPartNumber.children.push(Init_Exports_GroupID);
+
+    //Create the RemoveDir binding Call
+    let RemoveDirProps = this.genPhaseBCProps(projectLibraryData.functions.get("RemoveDir").params);
+    RemoveDirProps.dirName.value = "C:\\tester\\iLEFT";
+
+    this.DocObj.elements[RemoveDirID] = this.generateBaseBindingCall("bindingCall", "RemoveDir", Init_Exports_GroupID, "Init", false, RemoveDirProps, this.libraryName, "RemoveDir", false);
+    this.DocObj.structure[RemoveDirID] = this.generateBaseStructure("bindingCall", []);
+
+    //Create the DefaultStationExport binding call
+    this.DocObj.elements[DefaultStationExportID] = this.generateBaseBindingCall("bindingCall", "DefaultStationExport", Init_Exports_GroupID, "Init", false, this.genPhaseBCProps(subversionclientLibraryData.functions.get("DefaultStationExport").params), "gtm.utilities.subversionclient", "DefaultStationExport", false);
+    this.DocObj.structure[DefaultStationExportID] = this.generateBaseStructure("bindingCall", []);
+  
+    //Set up the Init_ProductLib group
+    this.DocObj.elements[Init_ProductLib_GroupID] = this.generateBaseGroup("group", "Init_ProductLib", "universalPartNumber", "Init", {}, false);
+    this.DocObj.structure[Init_ProductLib_GroupID] = this.generateBaseStructure("group", [SetupID]);
+    this.DocObj.structure.universalPartNumber.children.push(Init_ProductLib_GroupID);
 
     //Create the Setup binding call
-    this.DocObj.elements[setupID] = this.generateBaseBindingCall("bindingCall", "Setup", initGroupID, "Init", this.genPhaseBCProps(projectLibraryData.functions.get("Setup").params), this.libraryName, "Setup", false);
-    this.DocObj.structure[setupID] = this.generateBaseStructure("bindingCall", []);
-
-    //Create the Initialize bindingcall
-    let initProps = this.genPhaseBCProps(ipteLibraryData.functions.get("Initialize").params);
-    initProps.expectedFixtureIds.value = "configuration.fixtureId";
+    this.DocObj.elements[SetupID] = this.generateBaseBindingCall("bindingCall", "Setup", Init_ProductLib_GroupID, "Init", false, this.genPhaseBCProps(projectLibraryData.functions.get("Setup").params), this.libraryName, "Setup", false);
+    this.DocObj.structure[SetupID] = this.generateBaseStructure("bindingCall", []);
     
-    this.DocObj.elements[initializeID] = this.generateBaseBindingCall("bindingCall", "Initialize", initGroupID, "Init", initProps, "ileft.platform.iptehandler", "Initialize", false);
-    this.DocObj.structure[initializeID] = this.generateBaseStructure("bindingCall", []);
+    //Setup the Init_IpteRunnerActive group
+    this.DocObj.elements[Init_IpteRunnerActive_GroupID] = this.generateBaseGroup("group", "Init_IpteRunnerActive", "universalPartNumber", "Init", {}, false);
+    this.DocObj.structure[Init_IpteRunnerActive_GroupID] = this.generateBaseStructure("group", [CallProcessRunning_ipte_runnerID]);
+    this.DocObj.structure.universalPartNumber.children.push(Init_IpteRunnerActive_GroupID);
 
-    //Create the Send Start Message binding call
-    this.DocObj.elements[startMessageID] = this.generateBaseBindingCall("bindingCall", "SendStartMessage", initGroupID, "Init", this.genPhaseBCProps(ipteLibraryData.functions.get("SendStartMessage").params), "ileft.platform.iptehandler", "SendStartMessage", false);
-    this.DocObj.structure[startMessageID] = this.generateBaseStructure("bindingCall", []);
+    //Create the CallProcessRunning_ipte-runner evaluation call
+    let ipteRunnerEval= this.generateBaseGroup("evaluation", "CallProcessRunner-ipte-runner", Init_IpteRunnerActive_GroupID, "Init", {}, false);
+    ipteRunnerEval.evaluationType = this.generateBaseProperty("SCRIPTED", "builtin", "");
+    ipteRunnerEval.lowLimit = this.generateBaseProperty("0", "builtin", "");
+    ipteRunnerEval.highLimit = this.generateBaseProperty("0", "builtin", "");
+    ipteRunnerEval.value = this.generateBaseProperty("0", "builtin", "");
+    ipteRunnerEval.runtimeResume = this.generateBaseProperty(false, "builtin", "");
+    ipteRunnerEval.updateTestMetrics = this.generateBaseProperty(false, "builtin", "");
+    ipteRunnerEval.onEvaluate = this.generateBaseProperty("runtime.passed = true;", "builtin", "");
+    ipteRunnerEval.subroutine = this.generateBaseProperty(`${IpteRunnerSubroutine_GroupID}`, "builtin", "");
+   
+    this.DocObj.elements[CallProcessRunning_ipte_runnerID] = ipteRunnerEval;
+    this.DocObj.structure[CallProcessRunning_ipte_runnerID] = this.generateBaseStructure("evaluation", []);
+    
+    //Set up the Init_IPTE group
+    this.DocObj.elements[Init_IPTE_GroupID] = this.generateBaseGroup("group", "Init_IPTE", "universalPartNumber", "Init", {}, false);
+    this.DocObj.structure[Init_IPTE_GroupID] = this.generateBaseStructure("group", [RunInitializeID]);
+    this.DocObj.structure.universalPartNumber.children.push(Init_IPTE_GroupID);
+
+    //Create the RunInitialize
+    let RunInitializeProps = this.genPhaseBCProps(ipteLibraryData.functions.get("RunInitialize").params);
+    RunInitializeProps.expectedFixtureIds.value = "configuration.fixtureId";
+
+    this.DocObj.elements[RunInitializeID] = this.generateBaseBindingCall("bindingCall", "RunInitialize", Init_IPTE_GroupID, "Init", false, RunInitializeProps, "ileft.platform.iptehandler", "RunInitialize", false);
+    this.DocObj.structure[RunInitializeID] = this.generateBaseStructure("bindingCall", []);
 
     //------------------------------------------------------------------------
 
-    //Setup the load group
-    this.DocObj.elements[loadGroupID] = this.generateBaseGroup("group", "Load", "universalPartNumber", "Load", {}, false);
-    this.DocObj.structure[loadGroupID] = this.generateBaseStructure("group", [startOfTestsID, waitForReadyID ]);
-    this.DocObj.structure.universalPartNumber.children.push(loadGroupID);
+    //Setup the Load_StartOfTests group
+    this.DocObj.elements[Load_StartOfTests_GroupID] = this.generateBaseGroup("group", "Load_StartOfTests", "universalPartNumber", "Load", {}, false);
+    this.DocObj.structure[Load_StartOfTests_GroupID] = this.generateBaseStructure("group", [StartOfTestsID]);
+    this.DocObj.structure.universalPartNumber.children.push(Load_StartOfTests_GroupID);
 
     //Create the start of tests binding call
-    this.DocObj.elements[startOfTestsID] = this.generateBaseBindingCall("bindingCall", "StartOfTests", loadGroupID, "Load", this.genPhaseBCProps(projectLibraryData.functions.get("StartOfTests").params), this.libraryName, "StartOfTests", false);
-    this.DocObj.structure[startOfTestsID] = this.generateBaseStructure("bindingCall", []);
+    this.DocObj.elements[StartOfTestsID] = this.generateBaseBindingCall("bindingCall", "StartOfTests", Load_StartOfTests_GroupID, "Load", false, this.genPhaseBCProps(projectLibraryData.functions.get("StartOfTests").params), this.libraryName, "StartOfTests", false);
+    this.DocObj.structure[StartOfTestsID] = this.generateBaseStructure("bindingCall", []);
 
-    //Create the wait for ReadyForToTest binding call
-    this.DocObj.elements[waitForReadyID] = this.generateBaseBindingCall("bindingCall", "WaitForReadyToTest", loadGroupID, "Load", this.genPhaseBCProps(ipteLibraryData.functions.get("WaitForReadyToTest").params), "ileft.platform.iptehandler", "WaitForReadyToTest", false);
-    this.DocObj.structure[waitForReadyID] = this.generateBaseStructure("bindingCall", []);
+    //Setup the Load_IpteRunnerActive group
+    this.DocObj.elements[Load_IpteRunnerActive_GroupID] = this.generateBaseGroup("group", "Load_IpteRunnerActive", "universalPartNumber", "Load", {}, false);
+    this.DocObj.structure[Load_IpteRunnerActive_GroupID] = this.generateBaseStructure("group", [CallProcessRunning_ipte_runnerID_2]);
+    this.DocObj.structure.universalPartNumber.children.push(Load_IpteRunnerActive_GroupID);
+
+    //Create the CallProcessRunning_ipte-runner evaluation call
+    let Load_ipteRunnerEval= this.generateBaseGroup("evaluation", "CallProcessRunner-ipte-runner_2", Load_IpteRunnerActive_GroupID, "Load", {}, false);
+    Load_ipteRunnerEval.evaluationType = this.generateBaseProperty("SCRIPTED", "builtin", "");
+    Load_ipteRunnerEval.lowLimit = this.generateBaseProperty("0", "builtin", "");
+    Load_ipteRunnerEval.highLimit = this.generateBaseProperty("0", "builtin", "");
+    Load_ipteRunnerEval.value = this.generateBaseProperty("0", "builtin", "");
+    Load_ipteRunnerEval.runtimeResume = this.generateBaseProperty(false, "builtin", "");
+    Load_ipteRunnerEval.updateTestMetrics = this.generateBaseProperty(false, "builtin", "");
+    Load_ipteRunnerEval.onEvaluate = this.generateBaseProperty("runtime.passed = true;", "builtin", "");
+    Load_ipteRunnerEval.subroutine = this.generateBaseProperty(`${IpteRunnerSubroutine_GroupID}`, "builtin", "");
+   
+    this.DocObj.elements[CallProcessRunning_ipte_runnerID_2] = Load_ipteRunnerEval;
+    this.DocObj.structure[CallProcessRunning_ipte_runnerID_2] = this.generateBaseStructure("evaluation", []);
+    
+    //Setup the Load_IpteWaitForReadyToTest group
+    this.DocObj.elements[Load_IpteWaitForReadyToTest_GroupID] = this.generateBaseGroup("group", "Load_IpteWaitForReadyToTest", "universalPartNumber", "Load", {}, false);
+    this.DocObj.structure[Load_IpteWaitForReadyToTest_GroupID] = this.generateBaseStructure("group", [RunWaitForReadyToTestID]);
+    this.DocObj.structure.universalPartNumber.children.push(Load_IpteWaitForReadyToTest_GroupID);
+
+    //Create the start of tests binding call
+    this.DocObj.elements[RunWaitForReadyToTestID] = this.generateBaseBindingCall("bindingCall", "RunWaitForReadyTest", Load_IpteWaitForReadyToTest_GroupID, "Load", false, this.genPhaseBCProps(ipteLibraryData.functions.get("RunWaitForReadyToTest").params), "ileft.platform.iptehandler", "RunWaitForReadyToTest", false);
+    this.DocObj.structure[RunWaitForReadyToTestID] = this.generateBaseStructure("bindingCall", []);
   }
 
   addUnloadAndTeardown(dciGenLibrariesInfo) {
@@ -287,60 +494,126 @@ class TestPlan {
     let projectLibraryData = dciGenLibrariesInfo.get(this.libraryName);
     let ipteLibraryData = dciGenLibrariesInfo.get("ileft.platform.iptehandler");
 
+    //Add a group to log the config data
+    let LogConfid_GroupID = this.getGroupID();
+    let LogConfigData_ID = this.getBindingCallID();
+
+    this.DocObj.elements[LogConfid_GroupID] = this.generateBaseGroup("group", "LogConfig", "universalPartNumber", "Body", {}, false);
+    this.DocObj.structure[LogConfid_GroupID] = this.generateBaseStructure("group", [LogConfigData_ID]);
+    this.DocObj.structure.universalPartNumber.children.push(LogConfid_GroupID);
+
+    //Create the LogConfigData binding call
+    this.DocObj.elements[LogConfigData_ID] = this.generateBaseBindingCall("bindingCall", "LogConfigData", LogConfid_GroupID, "Body", false, this.genPhaseBCProps(dciGenLibrariesInfo.get(this.libraryName).functions.get("LogConfigData").params), this.libraryName, "LogConfigData", false);
+    this.DocObj.structure[LogConfigData_ID] = this.generateBaseStructure("bindingCall", []);
+
     //Generate all the IDs for the unload phase
-    let unloadGroupID = this.getGroupID();
-    let endOfTestsID = this.getBindingCallID();
-    let passFailID = this.getEvaluationID()
-    let sendPassFailID = this.getBindingCallID();
+    let Unlod_EndOfTest_GroupID = this.getGroupID();
+    let EndOfTestsID = this.getBindingCallID();
+
+    let Unload_SendPassFailToIPTE_GroupID = this.getGroupID()
+    let DetermineArrayPassFailID = this.getEvaluationID();
+    let RunSendArrayPassFailID = this.getBindingCallID();
 
     //Generate all the IDs for the teardown phase
-    let tearDownGroupID = this.getGroupID();
-    let tearDownID = this.getBindingCallID();
-    let endMessageID = this.getBindingCallID();
+    let Teardown_GroupID = this.getGroupID();
+    let TearDownID = this.getBindingCallID();
 
-    //Setup the unload group
-    this.DocObj.elements[unloadGroupID] = this.generateBaseGroup("group", "Unload", "universalPartNumber", "Unload", {}, false);
-    this.DocObj.structure[unloadGroupID] = this.generateBaseStructure("group", [endOfTestsID, passFailID, sendPassFailID]);
-    this.DocObj.structure.universalPartNumber.children.push(unloadGroupID);
+    let Teardown_IpteRunnerActive_GroupID = this.getGroupID();
+    let CallIpteRunnerID = this.getEvaluationID();
+
+    let Teardown_IpteEndMessage_GroupID = this.getGroupID();
+    let RunSendEndMeassageID = this.getGroupID();
+
+    //Setup the Unload_EndOfTests group
+    this.DocObj.elements[Unlod_EndOfTest_GroupID] = this.generateBaseGroup("group", "Unload_EndOfTests", "universalPartNumber", "Unload", {}, false);
+    this.DocObj.structure[Unlod_EndOfTest_GroupID] = this.generateBaseStructure("group", [EndOfTestsID]);
+    this.DocObj.structure.universalPartNumber.children.push(Unlod_EndOfTest_GroupID);
 
     //Create the EndOfTests binding call
-    this.DocObj.elements[endOfTestsID] = this.generateBaseBindingCall("bindingCall", "EndOfTests", unloadGroupID, "Unload", this.genPhaseBCProps(projectLibraryData.functions.get("EndOfTests").params), this.libraryName, "EndOfTests", false);
-    this.DocObj.structure[endOfTestsID] = this.generateBaseStructure("bindingCall", []);
+    this.DocObj.elements[EndOfTestsID] = this.generateBaseBindingCall("bindingCall", "EndOfTests", Unlod_EndOfTest_GroupID, "Unload", false, this.genPhaseBCProps(projectLibraryData.functions.get("EndOfTests").params), this.libraryName, "EndOfTests", false);
+    this.DocObj.structure[EndOfTestsID] = this.generateBaseStructure("bindingCall", []);
+    
+    //Setup the Unload_SendPassFailToIPTE group
+    this.DocObj.elements[Unload_SendPassFailToIPTE_GroupID] = this.generateBaseGroup("group", "Unload_SendPassFailToIPTE", "universalPartNumber", "Unload", {}, false);
+    this.DocObj.structure[Unload_SendPassFailToIPTE_GroupID] = this.generateBaseStructure("group", [DetermineArrayPassFailID, RunSendArrayPassFailID]);
+    this.DocObj.structure.universalPartNumber.children.push(Unload_SendPassFailToIPTE_GroupID);
+
+    let PassFailScript = 
+    `runtime.passed = false;
+
+var idp = __testMetrics__.isDUTPassing;
+var icrp = __testMetrics__.currentRunPassing;
+var frp = __testMetrics__.allDUTFormattedResultsPassing();
+    
+__report__.log( "isDUTPassing: " + idp );
+__report__.log( "currentRunPassing: " + icrp );
+__report__.log( "formattedResults Passing: " + frp );
+    
+arrayPassFailStatus = idp && icrp && frp;
+    
+__report__.log( "arrayPassFailStatus: " + arrayPassFailStatus );
+    
+runtime.passed = true;`
 
     //Create the DetermineArrayPassFail evaluation
     let passFailEvalProps = {arrayPassFailStatus: this.generateBaseProperty(false, "boolean", "[OUTPUT] arrayPassFailStatus") };
-    let passFailEval = this.generateBaseElement("evaluation", "DetermineArrayPassFail", unloadGroupID, "Unload", passFailEvalProps)
+    let passFailEval = this.generateBaseElement("evaluation", "DetermineArrayPassFail", Unload_SendPassFailToIPTE_GroupID, "Unload", passFailEvalProps)
     passFailEval.evaluationType = this.generateBaseProperty("SCRIPTED", "builtin", "");
     passFailEval.lowLimit = this.generateBaseProperty("0", "builtin", "");
     passFailEval.value = this.generateBaseProperty("0", "builtin", "");
     passFailEval.highLimit = this.generateBaseProperty("0", "builtin", "");
-    passFailEval.runtimeResume = this.generateBaseProperty(true, "builtin", "");
+    passFailEval.runtimeResume = this.generateBaseProperty(false, "builtin", "");
     passFailEval.updateTestMetrics = this.generateBaseProperty(false, "builtin", "");
-    passFailEval.onEvaluate = this.generateBaseProperty("arrayPassFailStatus = __testMetrics__.isArrayPassing && __testMetrics__.currentRunPassing;", "slot", "");
-    this.DocObj.elements[passFailID] = passFailEval;
-    this.DocObj.structure[passFailID] = this.generateBaseStructure("evaluation", []);
+    passFailEval.onEvaluate = this.generateBaseProperty(PassFailScript, "slot", "");
+
+    this.DocObj.elements[DetermineArrayPassFailID] = passFailEval;
+    this.DocObj.structure[DetermineArrayPassFailID] = this.generateBaseStructure("evaluation", []);
 
     //Create the SendArrayPassFail BindingCall
-    let sendPassFailProps = this.genPhaseBCProps(ipteLibraryData.functions.get("SendArrayPassFail").params);
-    sendPassFailProps.arrayPassed.value = passFailID + ".arrayPassFailStatus";
+    let sendPassFailProps = this.genPhaseBCProps(ipteLibraryData.functions.get("RunSendArrayPassFail").params);
+    sendPassFailProps.arrayPassed.value = DetermineArrayPassFailID + ".arrayPassFailStatus";
 
-    this.DocObj.elements[sendPassFailID] = this.generateBaseBindingCall("bindingCall", "SendArrayPassFail", unloadGroupID, "Unload", sendPassFailProps, "ileft.platform.iptehandler", "SendArrayPassFail", false);
-    this.DocObj.structure[sendPassFailID] = this.generateBaseStructure("bindingCall", []);
+    this.DocObj.elements[RunSendArrayPassFailID] = this.generateBaseBindingCall("bindingCall", "SendArrayPassFail", Unload_SendPassFailToIPTE_GroupID, "Unload", false, sendPassFailProps, "ileft.platform.iptehandler", "RunSendArrayPassFail", false);
+    this.DocObj.structure[RunSendArrayPassFailID] = this.generateBaseStructure("bindingCall", []);
 
     //-----------------------------------------------------------------
 
     //Setup the teardown group
-    this.DocObj.elements[tearDownGroupID] = this.generateBaseGroup("group", "Teardown", "universalPartNumber", "Teardown", {}, false);
-    this.DocObj.structure[tearDownGroupID] = this.generateBaseStructure("group", [tearDownID, endMessageID]);
-    this.DocObj.structure.universalPartNumber.children.push(tearDownGroupID);
+    this.DocObj.elements[Teardown_GroupID] = this.generateBaseGroup("group", "Teardown", "universalPartNumber", "Teardown", {}, false);
+    this.DocObj.structure[Teardown_GroupID] = this.generateBaseStructure("group", [TearDownID]);
+    this.DocObj.structure.universalPartNumber.children.push(Teardown_GroupID);
 
     //Create the teardown binding call
-    this.DocObj.elements[tearDownID] = this.generateBaseBindingCall("bindingCall", "TearDown", tearDownGroupID, "Teardown", this.genPhaseBCProps(projectLibraryData.functions.get("TearDown").params), this.libraryName, "TearDown", true);
-    this.DocObj.structure[tearDownID] = this.generateBaseStructure("bindingCall", []);
+    this.DocObj.elements[TearDownID] = this.generateBaseBindingCall("bindingCall", "Teardown", Teardown_GroupID, "Teardown", false, this.genPhaseBCProps(projectLibraryData.functions.get("TearDown").params), this.libraryName, "TearDown", true);
+    this.DocObj.structure[TearDownID] = this.generateBaseStructure("bindingCall", []);
+   
+    //Setup the Teardown_IpteRunnerActive group
+    this.DocObj.elements[Teardown_IpteRunnerActive_GroupID] = this.generateBaseGroup("group", "Teardown_IpteRunnerActive", "universalPartNumber", "Teardown", {}, false);
+    this.DocObj.structure[Teardown_IpteRunnerActive_GroupID] = this.generateBaseStructure("group", [CallIpteRunnerID]);
+    this.DocObj.structure.universalPartNumber.children.push(Teardown_IpteRunnerActive_GroupID);
 
-    //Create the send end message binding call
-    this.DocObj.elements[endMessageID] = this.generateBaseBindingCall("bindingCall", "SendEndMessage", tearDownGroupID, "Teardown", this.genPhaseBCProps(ipteLibraryData.functions.get("SendEndMessage").params), "ileft.platform.iptehandler", "SendEndMessage", true);
-    this.DocObj.structure[endMessageID] = this.generateBaseStructure("bindingCall", []);
+    //Create the CallProcessRunning_ipte-runner evaluation call
+    let Teardown_ipteRunnerEval= this.generateBaseGroup("evaluation", "CallProcessRunner-ipte-runner_3", Teardown_IpteRunnerActive_GroupID, "Teardown", {}, false);
+    Teardown_ipteRunnerEval.evaluationType = this.generateBaseProperty("SCRIPTED", "builtin", "");
+    Teardown_ipteRunnerEval.lowLimit = this.generateBaseProperty("0", "builtin", "");
+    Teardown_ipteRunnerEval.highLimit = this.generateBaseProperty("0", "builtin", "");
+    Teardown_ipteRunnerEval.value = this.generateBaseProperty("0", "builtin", "");
+    Teardown_ipteRunnerEval.runtimeResume = this.generateBaseProperty(false, "builtin", "");
+    Teardown_ipteRunnerEval.updateTestMetrics = this.generateBaseProperty(false, "builtin", "");
+    Teardown_ipteRunnerEval.onEvaluate = this.generateBaseProperty("runtime.passed = true;", "builtin", "");
+    Teardown_ipteRunnerEval.subroutine = this.generateBaseProperty(`${this.ipteRunnerSub_ID}`, "builtin", "");
+   
+    this.DocObj.elements[CallIpteRunnerID] = Teardown_ipteRunnerEval;
+    this.DocObj.structure[CallIpteRunnerID] = this.generateBaseStructure("evaluation", []);
+
+    //Setup the Teardown_IpteEndMessage group
+    this.DocObj.elements[Teardown_IpteEndMessage_GroupID] = this.generateBaseGroup("group", "Teardown_IpteEndMessage", "universalPartNumber", "Teardown", {}, false);
+    this.DocObj.structure[Teardown_IpteEndMessage_GroupID] = this.generateBaseStructure("group", [RunSendEndMeassageID]);
+    this.DocObj.structure.universalPartNumber.children.push(Teardown_IpteEndMessage_GroupID);
+
+    //Create the RunSendEndMessage binding call
+    this.DocObj.elements[RunSendEndMeassageID] = this.generateBaseBindingCall("bindingCall", "RunSendEndMessage", Teardown_IpteEndMessage_GroupID, "Teardown", false, this.genPhaseBCProps(ipteLibraryData.functions.get("RunSendEndMessage").params), "ileft.platform.iptehandler", "RunSendEndMessage", true);
+    this.DocObj.structure[RunSendEndMeassageID] = this.generateBaseStructure("bindingCall", []);
   }
 
   genPhaseBCProps(params, nonDefaultParams = null) {
@@ -447,7 +720,7 @@ class TestPlan {
       arrayCode += `    Sequence {\\n        identifier: ${index};\\n        description: \\"Thread ${index}\\";\\n        SerialStep: { steps: [ ${index} ] }\\n    }\\n\\n`        
     }
 
-    arrayCode  = arrayCode.slice(0,-1);
+    arrayCode  = arrayCode.slice(0,-2);
 
     arrayCode += `}\"`
    
@@ -542,6 +815,7 @@ class TestPlan {
   }
 
   generateConfigFiles(configProps, INIs, testPlanArray) {
+
     let localsMaster = {};
 
     //Generate the defaults 
@@ -557,7 +831,24 @@ class TestPlan {
       localsMaster[partNum] = {};
       localsMaster[partNum].Defaults = structuredClone(defaults);
     });
+
+    //Putting everything in the defaults. Making the assumption that we don't have any locked duplicate part numbers for now.
+    INIs.forEach(ini => {
+      ini.partNumbers.forEach(partNumberSection => {
+
+        let partNum = partNumberSection.seven_o_five;
+
+        partNumberSection.params.forEach((value, key) => {
+          if(key != "description") { localsMaster[partNum].Defaults[key] = value; }
+        })
+
+        ini.sections.forEach(commSection => {
+          commSection.params.forEach((value, key) => { localsMaster[partNum].Defaults[key] = value; })
+        })
+      })
+    })
   
+    /*
     INIs.forEach(ini => {     
       ini.partNumbers.forEach(partNumberSection => {
   
@@ -579,7 +870,19 @@ class TestPlan {
         localsMaster[partNum][ecoNum] = structuredClone(ecoObj);
       })
     })
+    */
 
+    //Add the config file key values from the testplan 
+      testPlanArray.forEach(testPlan => {
+        testPlan.partNumbers.forEach(partNumber => {
+          localsMaster[partNumber].Defaults.testerConfigFile = testPlan.testerConfigFile;
+          localsMaster[partNumber].Defaults.nodeMapFile = testPlan.nodeMapFile;
+          localsMaster[partNumber].Defaults.gpDigFile = testPlan.gpDigFile;
+          localsMaster[partNumber].Defaults.keyenceCommandsetFileName = "Keyence_Barcode_Reader.cmdset";
+        })
+      })
+
+    /*
     //Add the config file key values from the testplan 
       testPlanArray.forEach(testPlan => {
         testPlan.partNumbers.forEach(partNumber => {
@@ -593,11 +896,13 @@ class TestPlan {
           }
         })
       })
+    */
 
 
     //TODO this logic is not quite right. If there are multiple locked ECO, we run into issues.
     //I think I need to just throw an error if there are locked ECOs and not convert.
 
+    /*
     let localsMaster_copy = structuredClone(localsMaster);
 
     // We need to add every ECO to every part number
@@ -623,6 +928,7 @@ class TestPlan {
         }
       })
     })
+    */
   
      //Update the checked out svn exports folder incase it was already checked out.
      svn.update(projectPath + "/generatedConfig");
@@ -632,7 +938,7 @@ class TestPlan {
     for(let partNum in localsMaster) {
   
       //Make sure we create the part number folders
-      fs.mkdirSync(`${projectPath}\\generatedConfig\\${partNum}`);
+      fs.mkdirSync(`${projectPath}\\generatedConfig\\${partNum}\\iLEFT`)
       //Write the locals to the part number folders
       fs.writeFileSync(`${projectPath}\\generatedConfig\\${partNum}\\iLEFT\\locals.json`, JSON.stringify(localsMaster[partNum], null, 2), "utf-8");
       //Make sure the iLEFT station folder is created
@@ -686,6 +992,22 @@ class TestPlan {
     testPlanArray.forEach(testPlan =>{
       testPlan.testGroups.forEach((testGroup, index, testGroupsArray) => {
 
+        //Add an empty group to jump to on fail
+        if(testGroup.name == "TesterHardwareCleanup" && !masterTestGroupList.has("EndILEFT")) {
+          let endIleftID = this.getGroupID();
+          masterTestGroupList.set("EndILEFT", {groupID: endIleftID, associatedPartNumbers: this.partNumbers, arrayOfSubTests: []});
+          let endIleftGroup = this.generateBaseGroup("group", "EndILEFT", "universalPartNumber", "Body", {}, false);
+          endIleftGroup.loop = this.generateBaseProperty(0, "builtin", "");
+          endIleftGroup.retry = this.generateBaseProperty(0, "builtin", "");
+          endIleftGroup.comment = this.generateBaseProperty("EMPTY GROUP FOR JUMP ON FAILURES", "builtin", "");
+
+          this.DocObj.elements[endIleftID] = endIleftGroup;
+          this.DocObj.structure[endIleftID] = this.generateBaseStructure("group", []);
+
+          this.DocObj.structure.universalPartNumber.children.push(endIleftID);
+          previousGroupId = endIleftID;
+        }
+
         //A measurement subroutine and test group can't have the same name. Rename the test group if it has the same name as a subroutine.
         let uniqueTestGroupName = lowerCaseMCArray.includes(testGroup.name.toLowerCase()) ? testGroup.name + "Group" : testGroup.name;
 
@@ -720,8 +1042,9 @@ class TestPlan {
       })
       firstTestPlan = false;
     })
-  
+    
     masterTestGroupList.forEach((testGroupData, testGroupName, thisMap) => {
+
 
       //For each test group, the masterTestGroupList has an array of subtest arrays from each test plan we need to combine them into a single array of subtest that we can use to generate the evaluations.
       let masterSubTestArray = this.combineSubTests(testGroupData.arrayOfSubTests);
@@ -763,10 +1086,14 @@ class TestPlan {
         //let bindingCallID = this.measurementCallerMap.get(measurementCaller).bindingCallID;
   
         //The DCIGen WriteAquiredWaveformToFile_OnFailure method takes a bool as the testFailed param instead of a string like in the old testmethod. 
-        //We need to parse the old string param and use that to generate a script that will output a true or false value 
+        //We need to parse the old string param and use that to generate a script that will output a true or false value
+        let scriptEvalID = "";
         if(subTest.testMethod == "WriteAquiredWaveformToFile_OnFailure") {
-          const scriptEvalID = this.getEvaluationID();
+  
+          scriptEvalID = this.getEvaluationID();
           let waveformScript = this.generateWaveformSaveScript(subTest.testArgs.get("testFailed"), scriptEvalID);
+          console.log(subTest.testArgs.get("testFailed"));
+          console.log(waveformScript);
           let evalName = `WaveformScript_${subTest.testArgs.get("waveformID")}`;
 
           let scriptEval = this.generateBaseGroup("evaluation", evalName, testGroupData.groupID, "Body", {}, false);
@@ -777,7 +1104,7 @@ class TestPlan {
           scriptEval.runtimeResume = this.generateBaseProperty(true, "builtin", "");
           scriptEval.updateTestMetrics = this.generateBaseProperty(false, "builtin", "");
           scriptEval.onEvaluate = this.generateBaseProperty(waveformScript, "slot", "");
-          scriptEval.properties = {checkIfFailed: this.generateBaseProperty("", "string", "[OUTPUT]")};
+          scriptEval.properties = {testFailed: this.generateBaseProperty("", "boolean", "[OUTPUT]")};
 
           this.DocObj.elements[scriptEvalID] = scriptEval;
           this.DocObj.structure[scriptEvalID] = this.generateBaseStructure("evaluation", []);
@@ -809,7 +1136,8 @@ class TestPlan {
   
             let propertyValue;
             if(this.DocObj.elements[measurementCallerID].description == "WriteAquiredWaveformToFile_OnFailure" && property == "testFailed") {
-              propertyValue = false;
+
+              propertyValue = `${scriptEvalID}.testFailed`;
             }
             else if (property == "isSingleUpMode") {
                propertyValue = "%singleupmode%";
@@ -835,6 +1163,9 @@ class TestPlan {
           }
         }
       
+        console.log("TEST");
+        console.log(evaluationProps);
+        delete evaluationProps.measurementResult; //We don't need this in the measurement caller eval
         let evaluation = this.generateBaseEvaluation(subTest, testGroupName, testGroupData.groupID, measurementCallerID, `${measurementCallerID}.${targetOutput}`, evaluationProps);
         
         if(subTest.associatedPartNumbers.length < this.partNumbers.length) {
@@ -849,12 +1180,105 @@ class TestPlan {
         let testType = "";
         if(subTest.limitCheckEval == "1") {testType = "LIMITCHECK";}
         else if(subTest.passFailEval == "1") {testType = "PASSFAIL";}
-        else if(subTest.exactValEval == "1") {testType = "EXACT"}
-        else if(subTest.collectDataEval == "1") {testType = "COLLECTION"}
-        else if(subTest.compareDataEval == "1") {testType = "STRING"}
+        else if(subTest.exactValEval == "1") {
+          if (Number(subTest.value) == 1) {
+            testType = "PASSFAIL";
+          }
+          else {
+            testType = "EXACT";
+          } 
+        }
+        else if(subTest.collectDataEval == "1") {testType = "COLLECTION";}
+        else if(subTest.compareDataEval == "1") {testType = "STRING";}
 
         this.groupAndEvalMap[testGroupName].subTests.set(subTest.name, {newName: evaluation.description, subTestID: evaluationID, lowLimt: subTest.lowLimit, highLimit: subTest.highLimit, value: subTest.value, type: testType, boundLimitsMap: subTest.boundLimitsMap});
       })
+
+      //Add the script to init the result file serial number to all F's
+      let initSNEvalID = "";
+      if(testGroupName == "Cleanup") {
+        initSNEvalID = this.getEvaluationID();
+        let initSNEvalScript = "// Initialize the result file serial number incase we fail to scan\n\n__report__.setSerialNumber( \"FFFFFFFF\", \"\", 0, 16 );";
+        let initSNEvalName = "InitResultFileSerialNumber";
+
+        let initSNEval = this.generateBaseGroup("evaluation", initSNEvalName, testGroupData.groupID, "Body", {}, false);
+        initSNEval.evaluationType = this.generateBaseProperty("SCRIPTED", "builtin", "");
+        initSNEval.lowLimit = this.generateBaseProperty("0", "builtin", "");
+        initSNEval.highLimit = this.generateBaseProperty("0", "builtin", "");
+        initSNEval.value = this.generateBaseProperty("0", "builtin", "");
+        initSNEval.runtimeResume = this.generateBaseProperty(false, "builtin", "");
+        initSNEval.updateTestMetrics = this.generateBaseProperty(false, "builtin", "");
+        initSNEval.onEvaluate = this.generateBaseProperty(initSNEvalScript, "builtin", "");
+        initSNEval.properties = {testFailed: this.generateBaseProperty("", "boolean", "[OUTPUT]")};
+
+        this.DocObj.elements[initSNEvalID] = initSNEval;
+        this.DocObj.structure[initSNEvalID] = this.generateBaseStructure("evaluation", []);
+        this.DocObj.structure[testGroupData.groupID].children.push(initSNEvalID);
+        this.groupAndEvalMap[testGroupName].subTests.set(initSNEvalName, {newName: initSNEvalName, subTestID: initSNEvalID, lowLimt: initSNEval.lowLimit, highLimit: initSNEval.highLimit, value: initSNEval.value, type: "SCRIPTED", boundLimitsMap: initSNEval.boundLimitsMap});
+      }
+
+      //Add the jump on fail script
+      if(testGroupName != "EndILEFT" && testGroupName != "TesterHardwareCleanup" && testGroupName != "LogConfig") {
+        let jumpOnFailID = this.getEvaluationID();
+        let jumpOnFailScript = "runtime.passed = true;\n\nif(!__testMetrics__.isDUTPassing)\n{\n  runtime.passed = false;\n}";
+        let jumpOnFailName = `${testGroupName}_Success`;
+
+        let jumpOnFailEval = this.generateBaseGroup("evaluation", jumpOnFailName, testGroupData.groupID, "Body", {}, false);
+        jumpOnFailEval.evaluationType = this.generateBaseProperty("SCRIPTED", "builtin", "");
+        jumpOnFailEval.lowLimit = this.generateBaseProperty("0", "builtin", "");
+        jumpOnFailEval.highLimit = this.generateBaseProperty("0", "builtin", "");
+        jumpOnFailEval.value = this.generateBaseProperty("0", "builtin", "");
+        jumpOnFailEval.runtimeResume = this.generateBaseProperty(true, "builtin", "");
+        jumpOnFailEval.updateTestMetrics = this.generateBaseProperty(true, "builtin", "");
+        jumpOnFailEval.onEvaluate = this.generateBaseProperty(jumpOnFailScript, "builtin", "");
+        jumpOnFailEval.properties = {testFailed: this.generateBaseProperty("", "boolean", "[OUTPUT]")};
+        jumpOnFailEval.jumpOnFail = this.generateBaseProperty(masterTestGroupList.get("EndILEFT").groupID, "builtin", "");
+
+        this.DocObj.elements[jumpOnFailID] = jumpOnFailEval;
+        this.DocObj.structure[jumpOnFailID] = this.generateBaseStructure("evaluation", []);
+        this.DocObj.structure[testGroupData.groupID].children.push(jumpOnFailID);
+        this.groupAndEvalMap[testGroupName].subTests.set(jumpOnFailName, {newName: jumpOnFailName, subTestID: jumpOnFailID, lowLimt: jumpOnFailEval.lowLimit, highLimit: jumpOnFailEval.highLimit, value: jumpOnFailEval.value, type: "SCRIPTED", boundLimitsMap: jumpOnFailEval.boundLimitsMap});
+      }
+      
+      //Add the script to set the result file serial number to the scanned barcode and the eval to set the metadata barcode
+      let setSNEvalID = "";
+      if(testGroupName == "Scan") {
+        setSNEvalID = this.getEvaluationID();
+        let myBarcodeBCID =  this.measurementCallerMap.get("MyBarCode").bindingCallID;
+        let setSNEvalScript = `// Set the result file serial number to the scanned barcode\n\n__report__.setSerialNumber( ${myBarcodeBCID}.measurementResultOut, "", 0, 16 );`;
+        let setSNEvalName = "setResultFileSerialNumber";
+
+        let setSNEval = this.generateBaseGroup("evaluation", setSNEvalName, testGroupData.groupID, "Body", {}, false);
+        setSNEval.evaluationType = this.generateBaseProperty("SCRIPTED", "builtin", "");
+        setSNEval.lowLimit = this.generateBaseProperty("0", "builtin", "");
+        setSNEval.highLimit = this.generateBaseProperty("0", "builtin", "");
+        setSNEval.value = this.generateBaseProperty("0", "builtin", "");
+        setSNEval.runtimeResume = this.generateBaseProperty(false, "builtin", "");
+        setSNEval.updateTestMetrics = this.generateBaseProperty(false, "builtin", "");
+        setSNEval.onEvaluate = this.generateBaseProperty(setSNEvalScript, "builtin", "");
+        setSNEval.properties = {testFailed: this.generateBaseProperty("", "boolean", "[OUTPUT]")};
+
+        this.DocObj.elements[setSNEvalID] = setSNEval;
+        this.DocObj.structure[setSNEvalID] = this.generateBaseStructure("evaluation", []);
+        this.DocObj.structure[testGroupData.groupID].children.push(setSNEvalID);
+        this.groupAndEvalMap[testGroupName].subTests.set(setSNEvalName, {newName: setSNEvalName, subTestID: setSNEvalID, lowLimt: setSNEval.lowLimit, highLimit: setSNEval.highLimit, value: setSNEval.value, type: "SCRIPTED", boundLimitsMap: setSNEval.boundLimitsMap});
+      
+        let metaDataBarcodeID = this.getEvaluationID();
+        let metaDataBarcodeEval = this.generateBaseGroup("evaluation", "__barcode__", testGroupData.groupID, "Body", {}, false);
+        metaDataBarcodeEval.evaluationType = this.generateBaseProperty("COLLECTION", "builtin", "");
+        metaDataBarcodeEval.lowLimit = this.generateBaseProperty("0", "builtin", "");
+        metaDataBarcodeEval.highLimit = this.generateBaseProperty("0", "builtin", "");
+        metaDataBarcodeEval.value = this.generateBaseProperty("0", "builtin", "");
+        metaDataBarcodeEval.runtimeResume = this.generateBaseProperty(true, "builtin", "");
+        metaDataBarcodeEval.updateTestMetrics = this.generateBaseProperty(true, "builtin", "");
+        metaDataBarcodeEval.target = this.generateBaseProperty(`${this.measurementCallerMap.get("MyBarCode").bindingCallID}.measurementResultOut`, "builtin", "");
+  
+        this.DocObj.elements[metaDataBarcodeID] = metaDataBarcodeEval;
+        this.DocObj.structure[metaDataBarcodeID] = this.generateBaseStructure("evaluation", []);
+        this.DocObj.structure[testGroupData.groupID].children.push(metaDataBarcodeID);
+        this.groupAndEvalMap[testGroupName].subTests.set("__barcode__", {newName: "__barcode__", subTestID: metaDataBarcodeID, lowLimt: metaDataBarcodeEval.lowLimit, highLimit: metaDataBarcodeEval.highLimit, value: metaDataBarcodeEval.value, type: "COLLECTION", boundLimitsMap: metaDataBarcodeEval.boundLimitsMap});
+
+      }
     })
   }
 
@@ -902,20 +1326,20 @@ class TestPlan {
     svn.add(`${projectPath}\\generatedConfig`);
   }
   
-  generateWaveformSaveScript(checkIfFailedStr, evaluationID) {
-    let waveformSript = `${evaluationID}.checkIfFailed = !(`;
-    checkIfFailedStr.split("|").forEach(testToCheck => {
+  generateWaveformSaveScript(testFailedStr, evaluationID) {
+    let waveformSript = `${evaluationID}.testFailed = `;
+    testFailedStr.split("|").forEach(testToCheck => {
       const testToCheckArray = testToCheck.split("::");
 
 
       if(this.groupAndEvalMap[testToCheckArray[0]].subTests.has(testToCheckArray[1]))
       {
         let evalIDToCheck = this.groupAndEvalMap[testToCheckArray[0]].subTests.get(testToCheckArray[1]).subTestID;
-        waveformSript += `${evalIDToCheck}.runtime.passed || `;
+        waveformSript += `!${evalIDToCheck}.runtime.passed || `;
       }
       
     })
-    return waveformSript.slice(0,-4) + ");";
+    return waveformSript.slice(0,-4) + ";";
   }
   
   combineSubTests(arrayOfSubTests) {
@@ -1026,9 +1450,9 @@ class TestPlan {
        mergedSubTests.value = subtest2.value;
     }
 
-    if((limitCheck = subtest1.limitCheckEval == "1" && subtest2.limitCheckEval == "1") && (subtest1.lowLimit != subtest2.lowLimit || subtest1.highLimit != subtest2.highLimit)){
+    if((subtest1.limitCheckEval == "1" && subtest2.limitCheckEval == "1") && (subtest1.lowLimit != subtest2.lowLimit || subtest1.highLimit != subtest2.highLimit)){
 
-      if(!mergedSubTests.hasOwnProperty(boundLimitsMap)) {
+      if(!mergedSubTests.hasOwnProperty("boundLimitsMap")) {
         mergedSubTests.boundLimitsMap = new Map();
         mergedSubTests.lowLimit = "bound";
         mergedSubTests.lowLimit = "bound";
@@ -1107,12 +1531,12 @@ class TestPlan {
     return evaluation;
   }
 
-  generateBaseBindingCall(type, description = "", parentIdentifier = "", phase = "Body", properties = {}, library = "", method = "", runtimeResume = true) {
+  generateBaseBindingCall(type, description = "", parentIdentifier = "", phase = "Init", updateTestMetrics = true, properties = {}, library = "", method = "", runtimeResume = true) {
     let bindingCall = this.generateBaseElement(type, description, parentIdentifier, phase, properties);
     bindingCall.loop = this.generateBaseProperty(0, "builtin", "");
     bindingCall.retry = this.generateBaseProperty(0, "builtin", "");
     bindingCall.skipped = this.generateBaseProperty(false, "builtin", "");
-    bindingCall.updateTestMetrics = this.generateBaseProperty(false, "builtin", "");
+    bindingCall.updateTestMetrics = this.generateBaseProperty(updateTestMetrics, "builtin", "");
     bindingCall.runtimeResume = this.generateBaseProperty(runtimeResume, "builtin", "");
     bindingCall.library = this.generateBaseProperty(library, "builtin", "");
     let methodValue;
@@ -1124,6 +1548,9 @@ class TestPlan {
     }
     else if(library == "ileft.platform.iptehandler") {
       methodValue = "iptehandler_" + method;
+    }
+    else if(library == "gtm.utilities.qtui") {
+      methodValue = "QtUiUtils_" + method;
     }
     else {
       methodValue = "TestBinaryServiceImpl_" + method;
