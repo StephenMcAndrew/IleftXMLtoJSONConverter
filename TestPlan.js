@@ -13,7 +13,8 @@ class TestPlan {
     this.partNumbers; //An array of all the partnumbers
     this.ecoNumsMaster = new Set(); //A list of all the ECO numbers
 
-    this.ipteRunnerSub_ID; 
+    this.ipteRunnerSub_ID;
+    this.endIleftID = this.getGroupID(); 
 
     // This is used to keep track of which groupID and bindingCallID goes with which measurement caller
     // Map{[key => MeasurementCallerName value => {library: libraryName, groupID: groupID, bindingCallID: bindingCallID}]}
@@ -271,6 +272,14 @@ class TestPlan {
     let Load_IpteWaitForReadyToTest_GroupID = this.getGroupID();
     let RunWaitForReadyToTestID = this.getBindingCallID();
 
+    //Generate the init devcomm and jump on fail group IDS. These will be the first groups in the body phase
+    let JumpOnFail_GroupID = this.getGroupID();
+    let JumpOnFailID = this.getEvaluationID();
+
+    let InitDevComm_GroupID = this.getGroupID();
+    let InitDevComm_BindingCallID = this.getBindingCallID();
+    let InitDevComm_EvalID = this.getEvaluationID();
+
     //We need to add the ProcessRunning_ipte-runner sub routine
     let ipteSubProps = {ipteActive: this.generateBaseProperty(false, "boolean", "")};
 
@@ -486,6 +495,49 @@ if( runtime.passed ) {
     //Create the start of tests binding call
     this.DocObj.elements[RunWaitForReadyToTestID] = this.generateBaseBindingCall("bindingCall", "RunWaitForReadyTest", Load_IpteWaitForReadyToTest_GroupID, "Load", false, this.genPhaseBCProps(ipteLibraryData.functions.get("RunWaitForReadyToTest").params), "ileft.platform.iptehandler", "RunWaitForReadyToTest", false);
     this.DocObj.structure[RunWaitForReadyToTestID] = this.generateBaseStructure("bindingCall", []);
+
+    //--------------------------------------
+
+    //Setup the JUMP_ON_FAUL group
+    this.DocObj.elements[JumpOnFail_GroupID] = this.generateBaseGroup("group", "JUMP_ON_FAIL", "universalPartNumber", "Body", {}, true);
+    this.DocObj.structure[JumpOnFail_GroupID] = this.generateBaseStructure("group", [JumpOnFailID]);
+    this.DocObj.elements[JumpOnFail_GroupID].comment = this.generateBaseProperty("COPY WHERE NEEDED", "builtin", "");
+    this.DocObj.structure.universalPartNumber.children.push(JumpOnFail_GroupID);
+
+    //Create the JUMP_ON_FAUL eval
+    let JumpOnFailEval = this.generateBaseGroup("evaluation", "JUMP_ON_FAIL", JumpOnFail_GroupID, "Body", {}, false);
+    JumpOnFailEval.evaluationType = this.generateBaseProperty("SCRIPTED", "builtin", "");
+    JumpOnFailEval.lowLimit = this.generateBaseProperty("0", "builtin", "");
+    JumpOnFailEval.highLimit = this.generateBaseProperty("0", "builtin", "");
+    JumpOnFailEval.value = this.generateBaseProperty("0", "builtin", "");
+    JumpOnFailEval.runtimeResume = this.generateBaseProperty(true, "builtin", "");
+    JumpOnFailEval.updateTestMetrics = this.generateBaseProperty(true, "builtin", "");
+    JumpOnFailEval.onEvaluate = this.generateBaseProperty("runtime.passed = true;\n\nif(!__indexMetrics__.passing)\n{\n  runtime.passed = false;\n}", "builtin", "");
+    JumpOnFailEval.properties = {testFailed: this.generateBaseProperty("", "boolean", "[OUTPUT]")};
+    JumpOnFailEval.jumpOnFail = this.generateBaseProperty(this.endIleftID, "builtin", "");
+
+    this.DocObj.elements[JumpOnFailID] = JumpOnFailEval;
+    this.DocObj.structure[JumpOnFailID] = this.generateBaseStructure("evaluation", []);
+
+    //Setup the Init_Devcomm group
+    this.DocObj.elements[InitDevComm_GroupID] = this.generateBaseGroup("group", "Init_Devcomm", "universalPartNumber", "Body", {}, false);
+    this.DocObj.structure[InitDevComm_GroupID] = this.generateBaseStructure("group", [InitDevComm_BindingCallID, InitDevComm_EvalID]);
+    this.DocObj.structure.universalPartNumber.children.push(InitDevComm_GroupID);
+
+    //Create the Init_Devcomm binding call
+    this.DocObj.elements[InitDevComm_BindingCallID] = this.generateBaseBindingCall("bindingCall", "InitializeDevicecomm", InitDevComm_GroupID, "Body", true, this.genPhaseBCProps(projectLibraryData.functions.get("InitializeDevicecomm").params), this.libraryName, "InitializeDevicecomm", true);
+    this.DocObj.structure[InitDevComm_BindingCallID] = this.generateBaseStructure("bindingCall", []); 
+
+    //Create the Init_Devcomm eval
+    let InitDevcommEval = this.generateBaseGroup("evaluation", "Init_Devcomm_InitializeDevicecomm", InitDevComm_GroupID, "Body", {}, false);
+    InitDevcommEval.evaluationType = this.generateBaseProperty("EXACT", "builtin", "");
+    InitDevcommEval.value = this.generateBaseProperty("1", "builtin", "");
+    InitDevcommEval.runtimeResume = this.generateBaseProperty(true, "builtin", "");
+    InitDevcommEval.updateTestMetrics = this.generateBaseProperty(true, "builtin", "");
+    InitDevcommEval.target = this.generateBaseProperty(`${InitDevComm_BindingCallID}.returnValue`, "builtin", "");
+
+    this.DocObj.elements[InitDevComm_EvalID] = InitDevcommEval;
+    this.DocObj.structure[InitDevComm_EvalID] = this.generateBaseStructure("evaluation", []);
   }
 
   addUnloadAndTeardown(dciGenLibrariesInfo) {
@@ -541,15 +593,14 @@ if( runtime.passed ) {
     let PassFailScript = 
     `runtime.passed = false;
 
-var idp = __testMetrics__.isDUTPassing;
-var icrp = __testMetrics__.currentRunPassing;
+var aimp = __allIndexMetrics__.passing;
+var aimfrp = __allIndexMetrics__.formattedResultsPassing;
 var frp = __testMetrics__.allDUTFormattedResultsPassing();
     
-__report__.log( "isDUTPassing: " + idp );
-__report__.log( "currentRunPassing: " + icrp );
-__report__.log( "formattedResults Passing: " + frp );
+__report__.log( "All Index Metrics Passing: " + aimp );
+__report__.log( "All formattedResults passing: " + aimfrp );
     
-arrayPassFailStatus = idp && icrp && frp;
+arrayPassFailStatus = aimp && aimfrp;
     
 __report__.log( "arrayPassFailStatus: " + arrayPassFailStatus );
     
@@ -991,21 +1042,21 @@ runtime.passed = true;`
 
     testPlanArray.forEach(testPlan =>{
       testPlan.testGroups.forEach((testGroup, index, testGroupsArray) => {
-
+        
         //Add an empty group to jump to on fail
         if(testGroup.name == "TesterHardwareCleanup" && !masterTestGroupList.has("EndILEFT")) {
-          let endIleftID = this.getGroupID();
-          masterTestGroupList.set("EndILEFT", {groupID: endIleftID, associatedPartNumbers: this.partNumbers, arrayOfSubTests: []});
+          //let endIleftID = this.getGroupID();
+          masterTestGroupList.set("EndILEFT", {groupID: this.endIleftID, associatedPartNumbers: this.partNumbers, arrayOfSubTests: []});
           let endIleftGroup = this.generateBaseGroup("group", "EndILEFT", "universalPartNumber", "Body", {}, false);
           endIleftGroup.loop = this.generateBaseProperty(0, "builtin", "");
           endIleftGroup.retry = this.generateBaseProperty(0, "builtin", "");
           endIleftGroup.comment = this.generateBaseProperty("EMPTY GROUP FOR JUMP ON FAILURES", "builtin", "");
 
-          this.DocObj.elements[endIleftID] = endIleftGroup;
-          this.DocObj.structure[endIleftID] = this.generateBaseStructure("group", []);
+          this.DocObj.elements[this.endIleftID] = endIleftGroup;
+          this.DocObj.structure[this.endIleftID] = this.generateBaseStructure("group", []);
 
-          this.DocObj.structure.universalPartNumber.children.push(endIleftID);
-          previousGroupId = endIleftID;
+          this.DocObj.structure.universalPartNumber.children.push(this.endIleftID);
+          previousGroupId = this.endIleftID;
         }
 
         //A measurement subroutine and test group can't have the same name. Rename the test group if it has the same name as a subroutine.
@@ -1196,7 +1247,7 @@ runtime.passed = true;`
 
       //Add the script to init the result file serial number to all F's
       let initSNEvalID = "";
-      if(testGroupName == "Cleanup") {
+      if(testGroupName.startsWith("Cleanup")) {
         initSNEvalID = this.getEvaluationID();
         let initSNEvalScript = "// Initialize the result file serial number incase we fail to scan\n\n__report__.setSerialNumber( \"FFFFFFFF\", \"\", 0, 16 );";
         let initSNEvalName = "InitResultFileSerialNumber";
@@ -1220,7 +1271,7 @@ runtime.passed = true;`
       //Add the jump on fail script
       if(testGroupName != "EndILEFT" && testGroupName != "TesterHardwareCleanup" && testGroupName != "LogConfig") {
         let jumpOnFailID = this.getEvaluationID();
-        let jumpOnFailScript = "runtime.passed = true;\n\nif(!__testMetrics__.isDUTPassing)\n{\n  runtime.passed = false;\n}";
+        let jumpOnFailScript = "runtime.passed = true;\n\nif(!__indexMetrics__.passing)\n{\n  runtime.passed = false;\n}";
         let jumpOnFailName = `${testGroupName}_Success`;
 
         let jumpOnFailEval = this.generateBaseGroup("evaluation", jumpOnFailName, testGroupData.groupID, "Body", {}, false);
@@ -1318,6 +1369,7 @@ runtime.passed = true;`
         globals[ECO] = {};
       })
 
+      console.log(limits);
       fs.writeFileSync(`${projectPath}\\generatedConfig\\${partNum}\\iLEFT\\limits.json`, JSON.stringify(limits, null, 2), "utf-8");
       fs.writeFileSync(`${projectPath}\\generatedConfig\\${partNum}\\globals.json`, JSON.stringify(globals, null, 2), "utf-8");
     })

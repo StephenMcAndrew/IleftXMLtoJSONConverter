@@ -574,9 +574,12 @@ function parseXMLDocsAndINsToJSObjArray(xmlDocArray, INIs){
         let testGroup_nodes = xmlDoc.doc.evaluate("/boost_serialization/testPlan/m_testStations/item/m_tests/item", xmlDoc.doc, null, XPathResult.ANY_TYPE, null);
         let testGroup_node = testGroup_nodes.iterateNext();
 
+        let hasInitBeenAdded = false;
+
         //Loop through the test group nodes
         while(testGroup_node){
             let testGroup = {};
+            
             testGroup.name = testGroup_node.getElementsByTagName("m_name")[0].childNodes[0].nodeValue;
             testGroup.associatedPartNumbers = associatedPartNumbers;
 
