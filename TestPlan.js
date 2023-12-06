@@ -272,9 +272,12 @@ class TestPlan {
     let Load_IpteWaitForReadyToTest_GroupID = this.getGroupID();
     let RunWaitForReadyToTestID = this.getBindingCallID();
 
-    //Generate the init devcomm and jump on fail group IDS. These will be the first groups in the body phase
+    //Generate the log fixture IDs, init devcomm and jump on fail group IDS. These will be the first groups in the body phase
     let JumpOnFail_GroupID = this.getGroupID();
     let JumpOnFailID = this.getEvaluationID();
+
+    let LogFixtureIDs_GroupID = this.getGroupID();
+    let LogFixtureIDs_EvalID = this.getEvaluationID();
 
     let InitDevComm_GroupID = this.getGroupID();
     let InitDevComm_BindingCallID = this.getBindingCallID();
@@ -395,9 +398,8 @@ if( runtime.passed ) {
     ValidateJigIDsEval.runtimeResume = this.generateBaseProperty(false, "builtin", "");
     ValidateJigIDsEval.updateTestMetrics = this.generateBaseProperty(true, "builtin", "");
     ValidateJigIDsEval.onEvaluate = this.generateBaseProperty(ValidateJigIDsScript, "builtin", "");
-    ValidateJigIDsEval.currentJigSet = this.generateBaseProperty("ValidateJigIDsScript", "string", "[OUTPUT]");
+    ValidateJigIDsEval.properties = {currentJigSet: this.generateBaseProperty("", "string", "[OUTPUT]")};
 
-   
     this.DocObj.elements[ValidateJigIDsID] = ValidateJigIDsEval;
     this.DocObj.structure[ValidateJigIDsID] = this.generateBaseStructure("evaluation", []);
 
@@ -501,7 +503,7 @@ if( runtime.passed ) {
     //Setup the JUMP_ON_FAUL group
     this.DocObj.elements[JumpOnFail_GroupID] = this.generateBaseGroup("group", "JUMP_ON_FAIL", "universalPartNumber", "Body", {}, true);
     this.DocObj.structure[JumpOnFail_GroupID] = this.generateBaseStructure("group", [JumpOnFailID]);
-    this.DocObj.elements[JumpOnFail_GroupID].comment = this.generateBaseProperty("COPY WHERE NEEDED", "builtin", "");
+    //this.DocObj.elements[JumpOnFail_GroupID].comment = this.generateBaseProperty("COPY WHERE NEEDED", "builtin", "");
     this.DocObj.structure.universalPartNumber.children.push(JumpOnFail_GroupID);
 
     //Create the JUMP_ON_FAUL eval
@@ -518,6 +520,22 @@ if( runtime.passed ) {
 
     this.DocObj.elements[JumpOnFailID] = JumpOnFailEval;
     this.DocObj.structure[JumpOnFailID] = this.generateBaseStructure("evaluation", []);
+
+    //Setup the LogFixtureIDs group
+    this.DocObj.elements[LogFixtureIDs_GroupID] = this.generateBaseGroup("group", "LogFixtureIDs", "universalPartNumber", "Body", {}, false);
+    this.DocObj.structure[LogFixtureIDs_GroupID] = this.generateBaseStructure("group", [LogFixtureIDs_EvalID]);
+    this.DocObj.structure.universalPartNumber.children.push(LogFixtureIDs_GroupID);
+
+    //Create the LogFixtureIds eval
+    let LogFixtureIDsEval = this.generateBaseGroup("evaluation", "LogFixtureIDs", LogFixtureIDs_GroupID, "Body", {}, false);
+    LogFixtureIDsEval.evaluationType = this.generateBaseProperty("COLLECTION", "builtin", "");
+    LogFixtureIDsEval.value = this.generateBaseProperty("1", "builtin", "");
+    LogFixtureIDsEval.runtimeResume = this.generateBaseProperty(true, "builtin", "");
+    LogFixtureIDsEval.updateTestMetrics = this.generateBaseProperty(true, "builtin", "");
+    LogFixtureIDsEval.target = this.generateBaseProperty(`${ValidateJigIDsID}.currentJigSet`, "builtin", "");
+
+    this.DocObj.elements[LogFixtureIDs_EvalID] = LogFixtureIDsEval;
+    this.DocObj.structure[LogFixtureIDs_EvalID] = this.generateBaseStructure("evaluation", []);
 
     //Setup the Init_Devcomm group
     this.DocObj.elements[InitDevComm_GroupID] = this.generateBaseGroup("group", "Init_Devcomm", "universalPartNumber", "Body", {}, false);
